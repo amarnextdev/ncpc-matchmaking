@@ -1,0 +1,115 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/*
+ * NCPC Matchmaking design tokens
+ * "Clean institutional B2B": navy = brand and actions, green = verified and progress only.
+ * shadcn/ui components read these variables, so changing a token here restyles every component.
+ */
+:root {
+  --radius: 0.75rem;
+
+  /* Surfaces */
+  --background: #ffffff;
+  --foreground: #0f172a;
+  --surface: #f5f7fa; /* list-page background */
+  --surface-subtle: #f8fafc; /* subtle panels */
+
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+
+  /* Brand */
+  --primary: #13336b; /* NCPC navy */
+  --primary-foreground: #ffffff;
+  --primary-hover: #0b2350;
+  --primary-soft: #eef3fb;
+
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #475569;
+  --subtle-foreground: #64748b;
+  --accent: #eef3fb;
+  --accent-foreground: #13336b;
+
+  /* Status */
+  --success: #2f6b16; /* verified, done */
+  --success-bar: #5fa83a; /* progress and funding bars */
+  --success-soft: #eff7e9;
+  --warning: #7a4a06;
+  --warning-soft: #fff8ec;
+  --destructive: #b42318;
+  --destructive-foreground: #ffffff;
+
+  /* Lines and focus */
+  --border: #e2e8f0;
+  --input: #cbd5e1;
+  --ring: #13336b;
+}
+
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-subtle: var(--surface-subtle);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-success: var(--success);
+  --color-success-bar: var(--success-bar);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px); /* 8px: chips, inputs */
+  --radius-md: var(--radius); /* 12px: buttons, tiles */
+  --radius-lg: calc(var(--radius) + 4px); /* 16px: cards */
+  --radius-xl: calc(var(--radius) + 8px); /* 20px: gallery */
+
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04);
+  --shadow-float: 0 8px 28px rgb(15 23 42 / 0.06);
+  --shadow-overlay: 0 16px 40px rgb(15 23 42 / 0.1);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+}
+
+@layer utilities {
+  /* Small uppercase label used above values and in section eyebrows */
+  .text-eyebrow {
+    @apply text-xs font-semibold tracking-[0.08em] text-subtle-foreground uppercase;
+  }
+}
