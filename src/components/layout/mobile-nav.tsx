@@ -10,7 +10,13 @@ import { routes } from "@/config/routes";
 import { cn } from "@/lib/utils";
 
 /** Mobile menu panel under the header. Replaced by a shadcn Sheet when that component is added. */
-export function MobileNav() {
+export function MobileNav({
+  signedIn = false,
+  unread = 0,
+}: {
+  signedIn?: boolean;
+  unread?: number;
+}) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
@@ -52,12 +58,27 @@ export function MobileNav() {
               );
             })}
             <div className="mt-3 grid grid-cols-2 gap-2 border-t pt-4">
-              <Button variant="outline" asChild>
-                <Link href={routes.auth.signIn}>Sign in</Link>
-              </Button>
-              <Button asChild>
-                <Link href={routes.auth.register}>Register</Link>
-              </Button>
+              {signedIn ? (
+                <>
+                  <Button variant="outline" asChild>
+                    <Link href={routes.workspace.messages}>
+                      Messages{unread ? ` · ${unread}` : ""}
+                    </Link>
+                  </Button>
+                  <Button asChild>
+                    <Link href={routes.workspace.root}>My workspace</Link>
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="outline" asChild>
+                    <Link href={routes.auth.signIn}>Sign in</Link>
+                  </Button>
+                  <Button asChild>
+                    <Link href={routes.auth.register}>Register</Link>
+                  </Button>
+                </>
+              )}
             </div>
             <a
               href={siteConfig.externalUrl}

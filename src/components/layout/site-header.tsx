@@ -5,13 +5,22 @@ import { HeaderShell } from "@/components/layout/header-shell";
 import { MainNav } from "@/components/layout/main-nav";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { TopBar } from "@/components/layout/top-bar";
+import type { Viewer } from "@/types";
 
 /**
  * Public header:
  *   [ institutional strip ]
  *   [ NCPC logo | Matchmaking ]  Opportunities  Organisations  Funding  About   [search] | Sign in [Register]
  */
-export function SiteHeader() {
+export function SiteHeader({
+  viewer,
+  unread,
+  requests,
+}: {
+  viewer: Viewer;
+  unread?: number;
+  requests?: number;
+}) {
   return (
     <>
       <TopBar />
@@ -22,8 +31,8 @@ export function SiteHeader() {
           </div>
           <MainNav className="flex-1" />
           <div className="ml-auto flex items-center">
-            <HeaderActions />
-            <MobileNav />
+            <HeaderActions viewer={viewer} unread={unread} requests={requests} />
+            <MobileNav signedIn={viewer.signedIn} unread={unread} />
           </div>
         </Container>
       </HeaderShell>

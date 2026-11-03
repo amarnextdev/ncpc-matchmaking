@@ -1,0 +1,143 @@
+import Link from "next/link";
+import { CalendarDays, CheckCircle2, Handshake } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { routes } from "@/config/routes";
+import { cn } from "@/lib/utils";
+import type { FileRef, Message, Party } from "../../types";
+import { OrgAvatar } from "../org-avatar";
+
+const EVENT_ICON = { link: Handshake, calendar: CalendarDays, check: CheckCircle2 };
+
+const FILE_TONE: Record<FileRef["type"], string> = {
+  pdf: "bg-[#FDECEA] text-destructive",
+  xlsx: "bg-success-soft text-success",
+  doc: "bg-primary-soft text-primary",
+};
+
+/** One row of the chat: date divider, system event, or a post (LinkedIn-style, name + time). */
+export function MessageItem({
+  message: m,
+  parties,
+  mySlug,
+  compact,
+  dealStarted,
+  onStartDeal,
+}: {
+  message: Message;
+  parties: Party[];
+  mySlug: string;
+  compact?: boolean;
+  dealStarted?: (dealId: string) => boolean;
+  onStartDeal?: (dealId: string) => void;
+}) {
+  if (m.kind === "divider") {
+    return (
+      <div className="flex items-center gap-3 text-xs font-semibold text-subtle-foreground">
+        <span className="h-px flex-1 bg-border" />
+        {m.text}
+        <span className="h-px flex-1 bg-border" />
+      </div>
+    );
+  }
+  if (m.kind === "event") {
+    const Icon = EVENT_ICON[m.icon];
+    return (
+      <p
+        className={cn(
+          "flex max-w-full items-center gap-2 self-center rounded-full px-3.5 py-2 text-center text-[13px]",
+          m.tone === "green" ? "bg-success-soft text-[#1F4F0C]" : "bg-primary-soft text-primary",
+        )}
+      >
+        <Icon className="size-[15px] shrink-0" aria-hidden />
+        <span>
+          <strong>{m.title}</strong> {m.text}
+        </span>
+      </p>
+    );
+  }
+  const from = parties.find((p) => p.slug === m.from);
+  const mine = m.from === mySlug;
+  return (
+    <div className="flex gap-3">
+      {from ? (
+        <OrgAvatar initials={from.initials} tint={from.tint} size={compact ? "sm" : "md"} />
+      ) : null}
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <p className="text-[13px]">
+          <strong className="text-sm">{from?.name}</strong>{" "}
+          <span className="text-subtle-foreground">
+            {compact ? "" : `· ${m.person} `}· {m.time}
+          </span>
+        </p>
+        <p className="max-w-[640px] text-sm leading-[22px] whitespace-pre-line text-foreground/90">
+          {m.text}
+        </p>
+        {m.files?.length ? (
+          <div className="mt-0.5 flex flex-wrap gap-2">
+            {m.files.map((f) => (
+              <a
+                key={f.name}
+                href="#"
+                className="flex min-w-0 items-center gap-2.5 rounded-md border py-2.5 pr-3.5 pl-2.5 hover:bg-muted"
+              >
+                <span
+                  aria-hidden
+                  className={cn(
+                    "flex size-[34px] shrink-0 items-center justify-center rounded-[8px] text-[10px] font-bold uppercase",
+                    FILE_TONE[f.type],
+                  )}
+                >
+                  {f.type === "xlsx" ? "xls" : f.type}
+                </span>
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-[13px] font-semibold">{f.name}</span>
+                  <span className="text-xs text-subtle-foreground">{f.size}</span>
+                </span>
+              </a>
+            ))}
+          </div>
+        ) : null}
+        {m.project ? (
+          <div className="mt-0.5 w-full max-w-[380px] overflow-hidden rounded-lg border">
+            <div className="relative h-[72px]" style={{ backgroundColor: m.project.tint }}>
+              <span
+                className="absolute top-3 left-3 rounded-full bg-white px-2.5 py-0.5 text-[11px] font-bold"
+                style={{ color: m.project.tint }}
+              >
+                Shared project
+              </span>
+            </div>
+            <div className="flex flex-col gap-1 px-3.5 pt-3 pb-3.5">
+              <span className="text-eyebrow">{m.project.eyebrow}</span>
+              <span className="text-[15px] font-bold">{m.project.title}</span>
+              <span className="text-[13px] text-muted-foreground">{m.project.meta}</span>
+              <div className="mt-2 flex gap-2">
+                {m.project.slug ? (
+                  <Button asChild variant="outline" size="sm" className="flex-1">
+                    <Link href={routes.opportunities.detail(m.project.slug)}>View project</Link>
+                  </Button>
+                ) : null}
+                {mine ? (
+                  <span className="flex h-9 flex-1 items-center justify-center rounded-full bg-muted px-3 text-xs font-semibold text-muted-foreground">
+                    {dealStarted?.(m.project.dealId)
+                      ? "Deal started"
+                      : "Shared · waiting for reply"}
+                  </span>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="flex-1"
+                    disabled={dealStarted?.(m.project.dealId)}
+                    onClick={() => m.project && onStartDeal?.(m.project.dealId)}
+                  >
+                    {dealStarted?.(m.project.dealId) ? "Deal started" : "Start a deal"}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}

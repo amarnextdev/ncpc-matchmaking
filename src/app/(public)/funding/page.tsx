@@ -18,7 +18,7 @@ import {
   fundingQuery,
   parseFundingFilters,
 } from "@/features/funding/search-params";
-import type { Viewer } from "@/types";
+import { getViewer } from "@/lib/viewer";
 
 export const metadata: Metadata = {
   title: "Funding",
@@ -36,7 +36,7 @@ export default async function FundingPage({ searchParams }: PageProps) {
     getFundingStats(),
   ]);
   // TODO(Module 3 – Auth): real session. Members see "qualifies" lines and the eligibility toggle.
-  const viewer: Viewer = { signedIn: false };
+  const viewer = await getViewer();
   // TODO(Module 6 – Matching): the member's listed projects and how many offers they qualify for.
   const myProjects = ["Solar Rooftop & Battery Storage", "Rooftop Solar Phase 2"];
 

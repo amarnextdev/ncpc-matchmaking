@@ -5,14 +5,14 @@ Status: ✅ done · 🔄 in progress · ⏳ next · ▫️ later
 | # | Module | Status | Scope |
 | --- | --- | --- | --- |
 | 1 | Project setup | ✅ | Next.js, Tailwind v4, shadcn, theme tokens, header/footer, ComingSoon routes, config, Supabase/Drizzle clients, middleware |
-| 2 | Database schema | ⏳ | All tables in Drizzle, migrations, RLS policies, demo seed |
-| 3 | Auth | ▫️ | Sign in, register account, verify email, forgot/reset password, signed-in header (bell, My workspace, avatar), route guards |
-| 4 | Organisation onboarding | ▫️ | 4-step form: company, matchmaking info (fixed tags), logo/banner, documents → pending |
-| 5 | Admin approvals | ▫️ | Admin layout, approvals list, approve/reject with reason, emails |
+| 2 | Database schema | 🔨 schema written 3 Nov, migration pending | All tables in Drizzle, migrations, RLS policies, demo seed |
+| 3 | Auth | 🔨 code written 3 Nov (Supabase), needs keys + migration to test | Sign in, register account, verify email, forgot/reset password, signed-in header (bell, My workspace, avatar), route guards |
+| 4 | Organisation onboarding | 🔨 3 Nov: drafts (autosave + resume step), real uploads, submit → pending, changes_requested edit, new layout | 4-step form: company, matchmaking info (fixed tags), logo/banner, documents → pending |
+| 5 | Admin approvals | 🔨 approvals list + review + decide written 3 Nov; emails later | Admin layout, approvals list, approve/reject with reason, emails |
 | 6 | Organisations | 🟡 | Directory + filters, profile (about, offers/needs, projects, verified partners). **Directory + profile built on demo data**; needs DB + auth. |
 | 7 | Projects + Opportunities | 🟡 | Create/edit project, photos, updates, documents; Opportunities list + detail (approved designs). **Opportunities list page built on demo data** (src/features/opportunities/data); detail page next. |
 | 8 | Matchmaking engine | ▫️ | Role matrix, scoring, reasons, Recommended tab, match % on cards |
-| 9 | Enquiries + deal room | ▫️ | Send/accept/decline/expire, threads, realtime messages, files, deal status, notes |
+| 9 | Enquiries + deal room | 🟡 | Send/accept/decline/expire, threads, realtime messages, files, deal status, notes — Send enquiry dialog, Messages page (/workspace/messages) with Deal panel, and messaging dock built on demo data (26 Oct); server actions, realtime, My network page pending |
 | 10 | Agreements + tracking | ▫️ | Propose/confirm agreements, project partners, portfolio, funding bar |
 | 11 | Notifications | ▫️ | Bell, toast, page, Resend emails, settings, cron |
 | 12 | My workspace | ▫️ | Overview: action needed, pipeline, recommended, my projects |

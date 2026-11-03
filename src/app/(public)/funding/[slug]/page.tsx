@@ -19,7 +19,7 @@ import {
   Terms,
 } from "@/features/funding/components/detail/offer-sections";
 import { getOfferBySlug, getSimilarOffers } from "@/features/funding/queries";
-import type { Viewer } from "@/types";
+import { getViewer } from "@/lib/viewer";
 
 type PageProps = { params: Promise<{ slug: string }> };
 
@@ -37,7 +37,7 @@ export default async function FundingOfferPage({ params }: PageProps) {
 
   const similar = await getSimilarOffers(o, 3);
   // TODO(Module 3 – Auth): real session. Members see the eligibility check and Apply with a project.
-  const viewer: Viewer = { signedIn: false };
+  const viewer = await getViewer();
   const type = fundingType(o.type);
 
   const sections = [

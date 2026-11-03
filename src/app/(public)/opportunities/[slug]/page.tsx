@@ -4,6 +4,9 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { Container } from "@/components/layout/container";
 import { routes } from "@/config/routes";
+import { targetFromOpportunity } from "@/features/collaboration/enquiry-target";
+import { getConnectionHref } from "@/features/collaboration/queries";
+import { getViewer } from "@/lib/viewer";
 import { THEMES, labelFor } from "@/lib/constants";
 import { AboutSection } from "@/features/opportunities/components/detail/about-section";
 import {
@@ -23,7 +26,6 @@ import { SectionTabs } from "@/features/opportunities/components/detail/section-
 import { SimilarOpportunities } from "@/features/opportunities/components/detail/similar-opportunities";
 import { isNewListing } from "@/features/opportunities/detail-meta";
 import { getOpportunityBySlug, getSimilarOpportunities } from "@/features/opportunities/queries";
-import type { Viewer } from "@/features/opportunities/types";
 import { THEME_TINT } from "@/features/opportunities/utils";
 
 type PageProps = { params: Promise<{ slug: string }> };
@@ -42,9 +44,10 @@ export default async function OpportunityDetailPage({ params }: PageProps) {
 
   const similar = await getSimilarOpportunities(o, 3);
   // TODO(Module 3 – Auth): real session. Members see match %, Send enquiry and Save.
-  const viewer: Viewer = { signedIn: false };
+  const viewer = await getViewer();
+  const target = targetFromOpportunity(o, await getConnectionHref(viewer, o.owner.slug));
   const isNew = isNewListing(o);
-  const enquiry = <EnquiryButton viewer={viewer} slug={o.slug} />;
+  const enquiry = <EnquiryButton viewer={viewer} slug={o.slug} target={target} />;
 
   const sections = [
     { id: "overview", label: "Overview" },
@@ -80,7 +83,7 @@ export default async function OpportunityDetailPage({ params }: PageProps) {
             </div>
 
             <aside className="mb-8 flex flex-col gap-4 lg:sticky lg:top-[100px] lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mb-0 lg:self-start">
-              <FundingCard opportunity={o} viewer={viewer} isNew={isNew} />
+              <FundingCard opportunity={o} viewer={viewer} isNew={isNew} enquiryTarget={target} />
               <OwnerCard opportunity={o} />
             </aside>
 

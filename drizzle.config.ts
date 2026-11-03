@@ -11,6 +11,10 @@ export default defineConfig({
   schema: "./src/db/schema/index.ts",
   out: "./drizzle",
   dialect: "postgresql",
+  casing: "snake_case",
+  // Only our tables: Supabase owns the auth, storage and realtime schemas.
+  schemaFilter: ["public"],
+  entities: { roles: { provider: "supabase" } },
   dbCredentials: { url: process.env.DATABASE_URL },
   strict: true,
   verbose: true,

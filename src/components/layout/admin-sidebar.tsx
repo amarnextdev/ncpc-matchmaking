@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ArrowLeft, LogOut } from "lucide-react";
 import { BrandLogo } from "@/components/brand/brand-logo";
+import { signOutAction } from "@/features/auth/actions";
 import { adminNav } from "@/config/site";
 import { routes } from "@/config/routes";
 import { cn } from "@/lib/utils";
@@ -45,6 +47,22 @@ export function AdminSidebar() {
           </div>
         ))}
       </nav>
+      <div className="mt-auto flex flex-col gap-1 border-t border-white/10 pt-4">
+        <Link
+          href={routes.home}
+          className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium hover:bg-white/5 hover:text-white"
+        >
+          <ArrowLeft className="size-4" aria-hidden /> Back to website
+        </Link>
+        <form action={signOutAction}>
+          <button
+            type="submit"
+            className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm font-medium hover:bg-white/5 hover:text-white"
+          >
+            <LogOut className="size-4" aria-hidden /> Sign out
+          </button>
+        </form>
+      </div>
     </aside>
   );
 }

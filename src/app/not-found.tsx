@@ -8,7 +8,7 @@ import { routes } from "@/config/routes";
 export default function NotFound() {
   return (
     <>
-      <SiteHeader />
+      <SiteHeader viewer={{ signedIn: false }} />
       <main className="flex flex-col items-center gap-4 px-5 py-28 text-center">
         <SearchX className="size-10 text-primary" aria-hidden />
         <h1 className="text-3xl font-bold tracking-tight">Page not found</h1>

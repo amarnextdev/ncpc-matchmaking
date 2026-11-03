@@ -1,17 +1,7 @@
-import type { Metadata } from "next";
-import { LayoutDashboard } from "lucide-react";
-import { ComingSoon } from "@/components/shared/coming-soon";
+import { redirect } from "next/navigation";
+import { routes } from "@/config/routes";
 
-export const metadata: Metadata = { title: "Admin dashboard" };
-
+/** The admin dashboard comes later (Module 14); for now NCPC starts on Approvals. */
 export default function Page() {
-  return (
-    <ComingSoon
-      title="Admin dashboard"
-      description="Key numbers and recent activity will appear here."
-      icon={LayoutDashboard}
-      backHref="/opportunities"
-      backLabel="Back to website"
-    />
-  );
+  redirect(routes.admin.approvals);
 }

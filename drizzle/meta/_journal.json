@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1793686612418,
+      "tag": "0000_careless_mindworm",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793686681116,
+      "tag": "0001_storage_and_realtime",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793705598564,
+      "tag": "0002_onboarding_drafts",
+      "breakpoints": true
+    }
+  ]
+}

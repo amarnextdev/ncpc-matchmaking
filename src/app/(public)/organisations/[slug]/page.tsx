@@ -6,6 +6,9 @@ import { Container } from "@/components/layout/container";
 import { EnquiryButton } from "@/components/shared/enquiry-button";
 import { SectionTabs } from "@/components/shared/section-tabs";
 import { routes } from "@/config/routes";
+import { targetFromOrganisation } from "@/features/collaboration/enquiry-target";
+import { getConnectionHref } from "@/features/collaboration/queries";
+import { getViewer } from "@/lib/viewer";
 import { getOpportunitiesByOwner } from "@/features/opportunities/queries";
 import { tabForCategory } from "@/features/organisations/constants";
 import {
@@ -29,7 +32,6 @@ import {
 import { SimilarOrganisations } from "@/features/organisations/components/profile/similar-organisations";
 import { TrackRecordSection } from "@/features/organisations/components/profile/track-record-section";
 import { getOrganisationBySlug, getSimilarOrganisations } from "@/features/organisations/queries";
-import type { Viewer } from "@/types";
 
 type PageProps = { params: Promise<{ slug: string }> };
 
@@ -50,7 +52,8 @@ export default async function OrganisationProfilePage({ params }: PageProps) {
     getSimilarOrganisations(o, 3),
   ]);
   // TODO(Module 3 – Auth): real session. Members see their match % and Send enquiry.
-  const viewer: Viewer = { signedIn: false };
+  const viewer = await getViewer();
+  const target = targetFromOrganisation(o, await getConnectionHref(viewer, o.slug));
   const tab = tabForCategory(o.category);
 
   const sections = [
@@ -89,11 +92,11 @@ export default async function OrganisationProfilePage({ params }: PageProps) {
           ) : null}
         </nav>
 
-        <ProfileHeader organisation={o} viewer={viewer} />
+        <ProfileHeader organisation={o} viewer={viewer} enquiryTarget={target} />
 
         <div className="mt-8 grid gap-x-8 lg:grid-cols-[minmax(0,1fr)_360px]">
           <aside className="mb-8 flex flex-col gap-4 lg:sticky lg:top-[100px] lg:col-start-2 lg:row-start-1 lg:mb-0 lg:self-start">
-            <MatchCard organisation={o} viewer={viewer} />
+            <MatchCard organisation={o} viewer={viewer} enquiryTarget={target} />
             <ContactCard organisation={o} />
             <VerificationCard organisation={o} />
           </aside>

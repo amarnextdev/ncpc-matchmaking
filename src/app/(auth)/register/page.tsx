@@ -1,17 +1,16 @@
 import type { Metadata } from "next";
-import { UserPlus } from "lucide-react";
-import { ComingSoon } from "@/components/shared/coming-soon";
+import { redirect } from "next/navigation";
+import { RegisterForm } from "@/features/auth/components/register-form";
+import { homeForStatus } from "@/features/auth/home";
+import { routes } from "@/config/routes";
+import { getViewer } from "@/lib/viewer";
 
 export const metadata: Metadata = { title: "Register your organisation" };
 
-export default function Page() {
-  return (
-    <ComingSoon
-      title="Register your organisation"
-      description="Registration and company setup. Built in the Auth module."
-      icon={UserPlus}
-      backHref="/opportunities"
-      backLabel="Back to Opportunities"
-    />
-  );
+export default async function Page() {
+  const viewer = await getViewer();
+  if (viewer.signedIn) redirect(routes.workspace.root);
+  if (viewer.account)
+    redirect(homeForStatus(viewer.account.orgStatus, null, viewer.account.isAdmin));
+  return <RegisterForm />;
 }

@@ -6,6 +6,7 @@ import {
   Handshake,
   Inbox,
   LayoutDashboard,
+  MessageSquare,
   Settings,
   Sparkles,
   Users,
@@ -68,6 +69,7 @@ export const footerNav: NavGroup[] = [
 export const workspaceNav: NavItem[] = [
   { title: "Overview", href: routes.workspace.root, icon: LayoutDashboard },
   { title: "Recommended", href: routes.workspace.recommended, icon: Sparkles },
+  { title: "Messages", href: routes.workspace.messages, icon: MessageSquare },
   { title: "Enquiries", href: routes.workspace.enquiries, icon: Inbox },
   { title: "My projects", href: routes.workspace.projects, icon: FolderKanban },
   { title: "Organisation", href: routes.workspace.organisation, icon: Building2 },

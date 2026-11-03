@@ -4,6 +4,7 @@ import { EnquiryButton } from "@/components/shared/enquiry-button";
 import { Button } from "@/components/ui/button";
 import { routes } from "@/config/routes";
 import { formatDay, formatListed } from "@/lib/dates";
+import type { EnquiryTarget } from "@/features/collaboration/types";
 import type { Viewer } from "@/types";
 import { isNewMember } from "../../constants";
 import type { OrganisationDetail } from "../../types";
@@ -12,9 +13,11 @@ import type { OrganisationDetail } from "../../types";
 export function MatchCard({
   organisation: o,
   viewer,
+  enquiryTarget,
 }: {
   organisation: OrganisationDetail;
   viewer: Viewer;
+  enquiryTarget?: EnquiryTarget;
 }) {
   const returnTo = routes.organisations.detail(o.slug);
   return (
@@ -58,7 +61,13 @@ export function MatchCard({
               project.
             </p>
           ) : null}
-          <EnquiryButton viewer={viewer} returnTo={returnTo} size="lg" variant="inverse" />
+          <EnquiryButton
+            viewer={viewer}
+            returnTo={returnTo}
+            target={enquiryTarget}
+            size="lg"
+            variant="inverse"
+          />
           <p className="text-center text-xs text-[#B9C7DD]">
             You can attach one of your projects to the enquiry
           </p>
@@ -70,7 +79,13 @@ export function MatchCard({
             Sign in to see how well they match your organisation, view their documents and send an
             enquiry.
           </p>
-          <EnquiryButton viewer={viewer} returnTo={returnTo} size="lg" variant="inverse" />
+          <EnquiryButton
+            viewer={viewer}
+            returnTo={returnTo}
+            target={enquiryTarget}
+            size="lg"
+            variant="inverse"
+          />
           {viewer.signedIn ? null : (
             <Button
               asChild

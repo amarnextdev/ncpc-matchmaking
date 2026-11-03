@@ -1,0 +1,40 @@
+import "server-only";
+import { routes } from "@/config/routes";
+import type { Viewer } from "@/types";
+import { MOCK_CONVERSATIONS, MOCK_REQUESTS } from "./data/mock-conversations";
+import type { ConversationView, EnquiryRequest } from "./types";
+import { toView } from "./views";
+
+/**
+ * Data access for conversations and enquiries (demo data).
+ * TODO(Module 9): Drizzle queries + Supabase Realtime; RLS so members only read their own.
+ */
+export async function getConversations(viewer: Viewer): Promise<ConversationView[]> {
+  const slug = viewer.org?.slug;
+  if (!slug) return [];
+  return MOCK_CONVERSATIONS.map((c) => toView(c, slug)).filter(
+    (c): c is ConversationView => c !== null,
+  );
+}
+
+export async function getEnquiryRequests(viewer: Viewer): Promise<EnquiryRequest[]> {
+  return viewer.org ? (MOCK_REQUESTS[viewer.org.slug] ?? []) : [];
+}
+
+/** Link to the existing chat with an organisation, if the viewer is already connected to it. */
+export async function getConnectionHref(
+  viewer: Viewer,
+  orgSlug: string,
+): Promise<string | undefined> {
+  const mine = viewer.org?.slug;
+  if (!mine || mine === orgSlug) return undefined;
+  const c = MOCK_CONVERSATIONS.find(
+    (x) => x.parties.some((p) => p.slug === mine) && x.parties.some((p) => p.slug === orgSlug),
+  );
+  return c ? `${routes.workspace.messages}?c=${c.id}` : undefined;
+}
+
+export async function getUnreadCount(viewer: Viewer): Promise<number> {
+  const list = await getConversations(viewer);
+  return list.reduce((sum, c) => sum + c.unread, 0);
+}

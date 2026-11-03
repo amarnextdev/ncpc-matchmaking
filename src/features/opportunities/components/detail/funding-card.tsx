@@ -8,6 +8,7 @@ import { LOOKING_FOR, PROJECT_STAGES, PROVINCES, labelFor } from "@/lib/constant
 import { formatDay, formatListed } from "@/lib/dates";
 import { formatRand } from "@/lib/utils";
 import { IMPACT_ICON } from "../../detail-meta";
+import type { EnquiryTarget } from "@/features/collaboration/types";
 import type { OpportunityDetail, Viewer } from "../../types";
 import { EnquiryButton } from "./enquiry-button";
 
@@ -16,10 +17,12 @@ export function FundingCard({
   opportunity: o,
   viewer,
   isNew,
+  enquiryTarget,
 }: {
   opportunity: OpportunityDetail;
   viewer: Viewer;
   isNew: boolean;
+  enquiryTarget?: EnquiryTarget;
 }) {
   const raised = o.capitalRaised;
   const pct = o.capitalNeeded > 0 ? Math.min(100, Math.round((raised / o.capitalNeeded) * 100)) : 0;
@@ -152,7 +155,7 @@ export function FundingCard({
               </ul>
             </div>
           ) : null}
-          <EnquiryButton viewer={viewer} slug={o.slug} size="lg" />
+          <EnquiryButton viewer={viewer} slug={o.slug} target={enquiryTarget} size="lg" />
           <Button variant="outline" size="lg" type="button">
             <Bookmark aria-hidden />
             Save
@@ -163,7 +166,7 @@ export function FundingCard({
           <p className="rounded-md bg-surface p-3.5 text-sm leading-5 text-foreground/80">
             Sign in to see your match score, view locked documents and send an enquiry.
           </p>
-          <EnquiryButton viewer={viewer} slug={o.slug} size="lg" />
+          <EnquiryButton viewer={viewer} slug={o.slug} target={enquiryTarget} size="lg" />
           <Button asChild variant="outline" size="lg">
             <Link href={routes.auth.register}>Register your organisation</Link>
           </Button>

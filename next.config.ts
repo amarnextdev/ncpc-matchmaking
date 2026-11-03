@@ -5,8 +5,13 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   images: {
     remotePatterns: [
-      // Supabase Storage (logos, banners, project photos)
-      { protocol: "https", hostname: "*.supabase.co", pathname: "/storage/v1/object/public/**" },
+      // Supabase Storage public-images bucket (logos, banners, project photos).
+      // Private documents never go through next/image.
+      {
+        protocol: "https",
+        hostname: "*.supabase.co",
+        pathname: "/storage/v1/object/public/public-images/**",
+      },
     ],
   },
 };

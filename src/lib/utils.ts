@@ -6,21 +6,17 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-const randCompact = new Intl.NumberFormat("en-ZA", {
-  style: "currency",
-  currency: "ZAR",
+// Compact numbers with a dot decimal ("R12.5m"), the way amounts are written across the platform.
+// (en-ZA would give "R5,0m" because its currency format forces a decimal comma and digit.)
+const compact = new Intl.NumberFormat("en-GB", {
   notation: "compact",
+  minimumFractionDigits: 0,
   maximumFractionDigits: 1,
 });
 
-/** 18000000 → "R18m" (short Rand amounts for cards and stats). */
+/** 18000000 → "R18m", 12500000 → "R12.5m", 750000 → "R750k", 1400000000 → "R1.4bn". */
 export function formatRand(amount: number): string {
-  return randCompact
-    .format(amount)
-    .replace(/\s/g, "")
-    .replace("M", "m")
-    .replace("K", "k")
-    .replace("B", "bn");
+  return `R${compact.format(amount).replace("K", "k").replace("M", "m").replace("B", "bn").replace("T", "tn")}`;
 }
 
 /** 0.55 → "55%" */

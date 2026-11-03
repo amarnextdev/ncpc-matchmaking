@@ -1,17 +1,14 @@
 import type { Metadata } from "next";
-import { KeyRound } from "lucide-react";
-import { ComingSoon } from "@/components/shared/coming-soon";
+import { redirect } from "next/navigation";
+import { ResetPasswordForm } from "@/features/auth/components/reset-password-form";
+import { routes } from "@/config/routes";
+import { getSessionUser } from "@/lib/auth/session";
 
-export const metadata: Metadata = { title: "Reset password" };
+export const metadata: Metadata = { title: "Choose a new password" };
 
-export default function Page() {
-  return (
-    <ComingSoon
-      title="Reset password"
-      description="Choose a new password. Built in the Auth module."
-      icon={KeyRound}
-      backHref="/sign-in"
-      backLabel="Back to sign in"
-    />
-  );
+/** Reached from the reset email: /auth/callback signs the person in, then sends them here. */
+export default async function Page() {
+  const user = await getSessionUser();
+  if (!user) redirect(`${routes.auth.forgotPassword}?expired=1`);
+  return <ResetPasswordForm email={user.email ?? ""} />;
 }

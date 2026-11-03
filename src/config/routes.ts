@@ -25,14 +25,21 @@ export const routes = {
   auth: {
     signIn: "/sign-in",
     register: "/register",
+    verifyEmail: "/verify-email",
     forgotPassword: "/forgot-password",
     resetPassword: "/reset-password",
+  },
+
+  onboarding: {
+    root: "/onboarding",
+    pending: "/onboarding/pending",
   },
 
   workspace: {
     root: "/workspace",
     recommended: "/workspace/recommended",
     enquiries: "/workspace/enquiries",
+    messages: "/workspace/messages",
     projects: "/workspace/projects",
     organisation: "/workspace/organisation",
     notifications: "/workspace/notifications",
@@ -42,6 +49,8 @@ export const routes = {
   admin: {
     root: "/admin",
     approvals: "/admin/approvals",
+    approval: (id: string) => `/admin/approvals/${id}`,
+    file: (id: string) => `/admin/files/${id}`,
     organisations: "/admin/organisations",
     projects: "/admin/projects",
     funding: "/admin/funding",

@@ -1,4 +1,13 @@
-# 05 · Data model (planned, Module 2)
+# 05 · Data model (Module 2)
+
+> **Written 3 Nov 2026** in `src/db/schema/` (enums, users, files, organisations, projects,
+> collaboration, funding, notifications). The table below is the original plan; the code is the truth.
+> Changes vs plan: all uploads in `files` (Supabase Storage bucket + path); `project_needs` has
+> open/found per role; collaboration = `enquiries` (role, 300-char note, 30-day expiry) →
+> `conversations` (one per org pair) → `deals` (one per project, owner moves stage) →
+> `collaboration_requests` (+ versions, role form in jsonb) → `partnerships` (both confirm, adds to
+> `projects.capital_raised`). RLS on for every table; browser policies only for profiles, memberships,
+> conversations, messages and notifications (Realtime).
 
 PostgreSQL via Drizzle. One schema file per area in `src/db/schema/`, re-exported from `index.ts`.
 Arrays (`text[]`) for tags with GIN indexes; enums for categories/status/stages.

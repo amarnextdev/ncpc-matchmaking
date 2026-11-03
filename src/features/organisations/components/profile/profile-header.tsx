@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { routes } from "@/config/routes";
 import { ORGANISATION_CATEGORIES, PROVINCES, labelFor } from "@/lib/constants";
 import { formatMonth } from "@/lib/dates";
+import type { EnquiryTarget } from "@/features/collaboration/types";
 import type { Viewer } from "@/types";
 import { isNewMember } from "../../constants";
 import type { OrganisationDetail } from "../../types";
@@ -17,9 +18,11 @@ import type { OrganisationDetail } from "../../types";
 export function ProfileHeader({
   organisation: o,
   viewer,
+  enquiryTarget,
 }: {
   organisation: OrganisationDetail;
   viewer: Viewer;
+  enquiryTarget?: EnquiryTarget;
 }) {
   return (
     <section aria-labelledby="organisation-title" className="flex flex-col">
@@ -88,7 +91,11 @@ export function ProfileHeader({
             <Bookmark aria-hidden />
             Save
           </Button>
-          <EnquiryButton viewer={viewer} returnTo={routes.organisations.detail(o.slug)} />
+          <EnquiryButton
+            viewer={viewer}
+            returnTo={routes.organisations.detail(o.slug)}
+            target={enquiryTarget}
+          />
         </div>
       </div>
 
