@@ -1,5 +1,6 @@
 "use client";
 
+import { ExploreTabs } from "@/components/shared/explore-tabs";
 import { X } from "lucide-react";
 import {
   Select,
@@ -94,9 +95,11 @@ export function FundingResultsToolbar({ filters, total, facets, viewer, activeCo
   return (
     <div className="flex flex-col gap-3" aria-busy={params.isPending}>
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h2 className="text-lg font-bold" aria-live="polite">
-          {total} {closed ? "closed" : "open"} {total === 1 ? "offer" : "offers"}
-        </h2>
+        <ExploreTabs
+          active="funding"
+          total={total}
+          noun={`${closed ? "closed" : "open"} ${total === 1 ? "offer" : "offers"}`}
+        />
         <div className="flex w-full items-center gap-2.5 sm:w-auto">
           <FundingFiltersSheet
             facets={facets}

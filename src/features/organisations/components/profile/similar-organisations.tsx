@@ -22,7 +22,11 @@ export function SimilarOrganisations({
           Similar organisations
         </h2>
         <Link
-          href={tab ? `${routes.organisations.list}?type=${tab.value}` : routes.organisations.list}
+          href={
+            tab
+              ? routes.explore.section("organisations", `type=${tab.value}`)
+              : routes.organisations.list
+          }
           className="text-sm font-semibold text-primary hover:underline"
         >
           View all {tab ? tab.label.toLowerCase() : "organisations"} →

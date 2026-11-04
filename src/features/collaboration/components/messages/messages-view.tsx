@@ -1,12 +1,15 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { MessageSquare } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import type { ConversationView, Deal, DealDocument, Message } from "../../types";
+import { markConversationReadAction, sendMessageAction } from "../../actions";
+import { isDbId, useLiveMessages } from "../../use-live-messages";
 import { ChatThread } from "./chat-thread";
 import { ConversationList } from "./conversation-list";
 import { DealPanel } from "./deal-panel";
@@ -36,6 +39,19 @@ export function MessagesView({ conversations }: { conversations: ConversationVie
   const [started, setStarted] = useState<Record<string, true>>({});
   const [sent, setSent] = useState<Record<string, Message[]>>({});
   const [docs, setDocs] = useState<Record<string, DealDocument["status"]>>({});
+
+  // Live chat for database conversations; fresh server data replaces optimistic messages.
+  useLiveMessages(conversations.map((c) => c.id));
+  useEffect(() => setSent({}), [conversations]);
+
+  // Opening a conversation clears its unread badge.
+  const activeId = active?.id;
+  const activeUnread = active?.unread ?? 0;
+  useEffect(() => {
+    if (activeId && activeUnread && isDbId(activeId)) {
+      void markConversationReadAction(activeId).then(() => router.refresh());
+    }
+  }, [activeId, activeUnread, router]);
 
   const select = useCallback(
     (id: string | null) => {
@@ -121,6 +137,11 @@ export function MessagesView({ conversations }: { conversations: ConversationVie
         },
       ],
     }));
+    if (isDbId(active.id)) {
+      void sendMessageAction({ conversationId: active.id, body: text })
+        .then((r) => (r.ok ? router.refresh() : toast.error(r.error)))
+        .catch(() => toast.error("We could not send the message."));
+    }
   }
 
   const panel = (

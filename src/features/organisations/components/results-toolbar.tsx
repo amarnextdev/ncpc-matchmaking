@@ -1,5 +1,6 @@
 "use client";
 
+import { ExploreTabs } from "@/components/shared/explore-tabs";
 import { X } from "lucide-react";
 import {
   Select,
@@ -71,9 +72,11 @@ export function OrganisationResultsToolbar({ filters, total, facets, activeCount
   return (
     <div className="flex flex-col gap-3" aria-busy={params.isPending}>
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h2 className="text-lg font-bold" aria-live="polite">
-          {total} {total === 1 ? "organisation" : "organisations"}
-        </h2>
+        <ExploreTabs
+          active="organisations"
+          total={total}
+          noun={total === 1 ? "organisation" : "organisations"}
+        />
         <div className="flex w-full items-center gap-2.5 sm:w-auto">
           <OrganisationFiltersSheet facets={facets} activeCount={activeCount} total={total} />
           <Select

@@ -83,7 +83,7 @@ export default async function OrganisationProfilePage({ params }: PageProps) {
             <>
               <span aria-hidden>/</span>
               <Link
-                href={`${routes.organisations.list}?type=${tab.value}`}
+                href={routes.explore.section("organisations", `type=${tab.value}`)}
                 className="hover:text-foreground"
               >
                 {tab.label}

@@ -124,7 +124,8 @@ export function OnboardingForm({
       }
       setSave((s) => ({ ...s, status: "error" }));
       // Autosave fails quietly (the indicator shows it); only an explicit save shows a message.
-      if (notify) toast.error(result && !result.ok ? result.error : "We could not save your draft.");
+      if (notify)
+        toast.error(result && !result.ok ? result.error : "We could not save your draft.");
       return false;
     },
     [form],
@@ -200,130 +201,125 @@ export function OnboardingForm({
     <div className="flex flex-col gap-5">
       <Stepper current={step} reached={reached} onGo={goTo} />
 
-
-        {mode === "changes" && reviewNote ? (
-          <div
-            role="note"
-            className="flex gap-3 rounded-2xl border border-warning/25 bg-warning-soft px-4 py-3.5 text-sm text-warning"
-          >
-            <RotateCcw className="mt-0.5 size-4 shrink-0" aria-hidden />
-            <div>
-              <p className="font-semibold">NCPC asked for changes</p>
-              <p className="mt-0.5 text-warning/90">&ldquo;{reviewNote}&rdquo;</p>
-              <p className="mt-1 text-xs text-warning/80">
-                Update the details below, then submit again.
-              </p>
-            </div>
-          </div>
-        ) : mode === "draft" && draftDate ? (
-          <div
-            role="note"
-            className="flex gap-3 rounded-2xl border border-primary/15 bg-primary-soft px-4 py-3 text-sm text-primary"
-          >
-            <Check className="mt-0.5 size-4 shrink-0" aria-hidden />
-            <p>
-              <strong>Welcome back.</strong> We kept your answers from {dayFmt.format(draftDate)}.
-              Carry on where you left off.
+      {mode === "changes" && reviewNote ? (
+        <div
+          role="note"
+          className="flex gap-3 rounded-2xl border border-warning/25 bg-warning-soft px-4 py-3.5 text-sm text-warning"
+        >
+          <RotateCcw className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <div>
+            <p className="font-semibold">NCPC asked for changes</p>
+            <p className="mt-0.5 text-warning/90">&ldquo;{reviewNote}&rdquo;</p>
+            <p className="mt-1 text-xs text-warning/80">
+              Update the details below, then submit again.
             </p>
           </div>
-        ) : null}
+        </div>
+      ) : mode === "draft" && draftDate ? (
+        <div
+          role="note"
+          className="flex gap-3 rounded-2xl border border-primary/15 bg-primary-soft px-4 py-3 text-sm text-primary"
+        >
+          <Check className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <p>
+            <strong>Welcome back.</strong> We kept your answers from {dayFmt.format(draftDate)}.
+            Carry on where you left off.
+          </p>
+        </div>
+      ) : null}
 
-        <Form {...form}>
-          <form
-            noValidate
-            onSubmit={(e) => {
-              if (step < LAST) {
-                e.preventDefault();
-                if (checkStep(step)) goTo(step + 1);
-                return;
-              }
-              void form.handleSubmit(onSubmit, onInvalid)(e);
-            }}
-            aria-labelledby="step-title"
-            className="overflow-hidden rounded-2xl border bg-background shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3 border-b px-5 py-5 sm:px-8">
-              <div>
-                <p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">
-                  Step {step + 1} of {ONBOARDING_STEPS.length}
-                </p>
-                <h2
-                  id="step-title"
-                  ref={headingRef}
-                  tabIndex={-1}
-                  className="mt-1 text-[22px] font-bold outline-none"
-                >
-                  {current.title}
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">{current.help}</p>
-              </div>
-              <SaveIndicator state={save} />
-            </div>
-
-            <div className="flex flex-col gap-6 px-5 py-6 sm:px-8 sm:py-7">
-              {step === 0 ? <StepCompany /> : null}
-              {step === 1 ? <StepMatchmaking /> : null}
-              {step === 2 ? <StepProfile /> : null}
-              {step === 3 ? <StepDocuments /> : null}
-
-              {submitError ? (
-                <p
-                  role="alert"
-                  className="flex gap-2 rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive"
-                >
-                  <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
-                  {submitError}
-                </p>
-              ) : null}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2.5 border-t bg-surface-subtle px-5 py-4 sm:px-8">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={step === 0}
-                onClick={() => goTo(step - 1)}
-                className="flex-1 sm:flex-none"
+      <Form {...form}>
+        <form
+          noValidate
+          onSubmit={(e) => {
+            if (step < LAST) {
+              e.preventDefault();
+              if (checkStep(step)) goTo(step + 1);
+              return;
+            }
+            void form.handleSubmit(onSubmit, onInvalid)(e);
+          }}
+          aria-labelledby="step-title"
+          className="overflow-hidden rounded-2xl border bg-background shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b px-5 py-5 sm:px-8">
+            <div>
+              <p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+                Step {step + 1} of {ONBOARDING_STEPS.length}
+              </p>
+              <h2
+                id="step-title"
+                ref={headingRef}
+                tabIndex={-1}
+                className="mt-1 text-[22px] font-bold outline-none"
               >
-                <ArrowLeft aria-hidden /> Back
-              </Button>
-              <span className="hidden flex-1 sm:block" />
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => void saveAndLeave()}
-                disabled={save.status === "saving" || submitting}
-                className="flex-1 text-primary sm:flex-none"
-              >
-                <Save aria-hidden /> Save and finish later
-              </Button>
-              <Button
-                type="submit"
-                className={cn("flex-1 px-6 sm:flex-none")}
-                disabled={submitting}
-              >
-                {submitting ? <Loader2 className="animate-spin" aria-hidden /> : null}
-                {step < LAST ? (
-                  <>
-                    Continue <ArrowRight aria-hidden />
-                  </>
-                ) : mode === "changes" ? (
-                  "Send to NCPC again"
-                ) : (
-                  "Submit for verification"
-                )}
-              </Button>
+                {current.title}
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">{current.help}</p>
             </div>
-          </form>
-        </Form>
+            <SaveIndicator state={save} />
+          </div>
 
-        <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-xs text-muted-foreground">
-          <HelpCircle className="size-3.5" aria-hidden />
-          Your answers save as you go, so you can leave and continue later from the same step.
-          <Link href={routes.contact} className="font-semibold text-primary hover:underline">
-            Need help?
-          </Link>
-        </p>
+          <div className="flex flex-col gap-6 px-5 py-6 sm:px-8 sm:py-7">
+            {step === 0 ? <StepCompany /> : null}
+            {step === 1 ? <StepMatchmaking /> : null}
+            {step === 2 ? <StepProfile /> : null}
+            {step === 3 ? <StepDocuments /> : null}
+
+            {submitError ? (
+              <p
+                role="alert"
+                className="flex gap-2 rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+              >
+                <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
+                {submitError}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5 border-t bg-surface-subtle px-5 py-4 sm:px-8">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={step === 0}
+              onClick={() => goTo(step - 1)}
+              className="flex-1 sm:flex-none"
+            >
+              <ArrowLeft aria-hidden /> Back
+            </Button>
+            <span className="hidden flex-1 sm:block" />
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => void saveAndLeave()}
+              disabled={save.status === "saving" || submitting}
+              className="flex-1 text-primary sm:flex-none"
+            >
+              <Save aria-hidden /> Save and finish later
+            </Button>
+            <Button type="submit" className={cn("flex-1 px-6 sm:flex-none")} disabled={submitting}>
+              {submitting ? <Loader2 className="animate-spin" aria-hidden /> : null}
+              {step < LAST ? (
+                <>
+                  Continue <ArrowRight aria-hidden />
+                </>
+              ) : mode === "changes" ? (
+                "Send to NCPC again"
+              ) : (
+                "Submit for verification"
+              )}
+            </Button>
+          </div>
+        </form>
+      </Form>
+
+      <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-xs text-muted-foreground">
+        <HelpCircle className="size-3.5" aria-hidden />
+        Your answers save as you go, so you can leave and continue later from the same step.
+        <Link href={routes.contact} className="font-semibold text-primary hover:underline">
+          Need help?
+        </Link>
+      </p>
     </div>
   );
 }

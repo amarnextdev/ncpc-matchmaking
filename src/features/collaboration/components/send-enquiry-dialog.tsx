@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import Image from "next/image";
 import Link from "next/link";
-import { Check, Info, Sun } from "lucide-react";
+import { AlertCircle, Check, Clock3, Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
 import { VerifiedBadge } from "@/components/shared/verified-badge";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
@@ -27,7 +27,8 @@ import { LOOKING_FOR, ORGANISATION_CATEGORIES, labelFor, type LookingFor } from 
 import { formatDay } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import type { ViewerOrg } from "@/types";
-import { ENQUIRY_EXPIRY_DAYS, NOTE_MAX, ROLE_CATEGORIES, canPlay, rolesFor } from "../constants";
+import { sendEnquiryAction } from "../actions";
+import { ENQUIRY_EXPIRY_DAYS, NOTE_MAX, canPlay, rolesFor } from "../constants";
 import type { EnquiryTarget } from "../types";
 import { OrgAvatar } from "./org-avatar";
 
@@ -48,11 +49,14 @@ const QUICK_NOTES = [
   },
 ];
 
-const categoriesText = (role: LookingFor) =>
-  ROLE_CATEGORIES[role]
-    .map((c) => labelFor(ORGANISATION_CATEGORIES, c).toLowerCase())
-    .join(", ")
-    .replace(/, ([^,]*)$/, " and $1");
+const ROLE_HELP: Record<LookingFor, string> = {
+  investor: "Equity or debt into the project",
+  funder: "Grant, loan or guarantee",
+  technology: "Supply or install the technology",
+  contractor: "Build, install or maintain",
+  site_host: "Provide the site or roof space",
+  off_taker: "Buy the power, water or output",
+};
 
 type Props = {
   target: EnquiryTarget;
@@ -66,7 +70,6 @@ type Props = {
  * "Send enquiry" button + dialog (bottom sheet on phones), like a LinkedIn invitation with a note.
  * From a project page the project is fixed and the role comes from its "Looking for";
  * from an organisation profile the project is optional.
- * TODO(Module 9): server action that creates the enquiry, notifies the owner and expires it after 30 days.
  */
 export function SendEnquiryDialog({
   target,
@@ -77,36 +80,56 @@ export function SendEnquiryDialog({
 }: Props) {
   const fromProject = Boolean(target.project);
   const projectRoles = target.project?.lookingFor ?? [];
-  const firstAllowed = projectRoles.find((r) => canPlay(viewerOrg.category, r));
-  const partnerRoles = target.org.category ? rolesFor(target.org.category) : [];
+  const allowed = fromProject
+    ? projectRoles.filter((r) => canPlay(viewerOrg.category, r))
+    : target.org.category
+      ? rolesFor(target.org.category)
+      : [];
+  const blocked = fromProject ? projectRoles.filter((r) => !canPlay(viewerOrg.category, r)) : [];
 
   const [open, setOpen] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [sent, setSent] = useState<{ expiresAt: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [ownProject, setOwnProject] = useState(GENERAL);
-  const [role, setRole] = useState<LookingFor | undefined>(
-    fromProject ? firstAllowed : partnerRoles[0],
-  );
+  const [role, setRole] = useState<LookingFor | undefined>(allowed[0]);
+  const [pending, start] = useTransition();
 
-  const withOwnProject = !fromProject && ownProject !== GENERAL;
-  const roleOptions = fromProject ? projectRoles : withOwnProject ? partnerRoles : [];
-  const canSend = fromProject ? Boolean(firstAllowed && role) : true;
-  const expires = formatDay(new Date(Date.now() + ENQUIRY_EXPIRY_DAYS * 86_400_000).toISOString());
+  const canSend = Boolean(role) && !pending;
   const projectTitle =
     target.project?.title ??
     viewerOrg.projects.find((p) => (p.slug ?? p.title) === ownProject)?.title;
+  const myCategory = labelFor(ORGANISATION_CATEGORIES, viewerOrg.category).toLowerCase();
 
   function reset(next: boolean) {
     setOpen(next);
     if (!next) {
-      setSent(false);
+      setSent(null);
+      setError(null);
       setNote("");
     }
   }
 
   function send() {
-    setSent(true);
-    toast.success(`Enquiry sent to ${target.org.name}`);
+    if (!role) return;
+    setError(null);
+    start(async () => {
+      const result = await sendEnquiryAction({
+        toOrgSlug: target.org.slug,
+        projectSlug: target.project?.slug ?? null,
+        role,
+        note,
+      }).catch(() => ({
+        ok: false as const,
+        error: "We could not send the enquiry. Please try again.",
+      }));
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setSent({ expiresAt: result.expiresAt });
+      toast.success(`Enquiry sent to ${target.org.name}`);
+    });
   }
 
   return (
@@ -121,44 +144,46 @@ export function SendEnquiryDialog({
       </DialogTrigger>
       <DialogContent
         className={cn(
-          "gap-0 p-0 sm:max-w-[580px]",
+          "flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[560px]",
           "max-sm:top-auto max-sm:bottom-0 max-sm:max-h-[92dvh] max-sm:w-full max-sm:max-w-none max-sm:translate-y-0 max-sm:rounded-b-none",
         )}
       >
         {sent ? (
-          <div className="flex flex-col items-center gap-3.5 px-7 pt-8 pb-7 text-center">
-            <span className="flex size-[60px] items-center justify-center rounded-full bg-success-soft">
+          <div className="flex flex-col items-center gap-3 px-7 pt-9 pb-7 text-center">
+            <span className="flex size-14 items-center justify-center rounded-full bg-success-soft">
               <Check className="size-7 text-success" strokeWidth={2.5} aria-hidden />
             </span>
-            <DialogTitle className="text-[22px]">Enquiry sent</DialogTitle>
-            <DialogDescription className="max-w-[420px] text-[15px] leading-[23px]">
-              {target.org.name} will be notified by email and in their bell. You can message each
-              other as soon as they accept.
+            <DialogTitle className="mt-1 text-[22px]">Enquiry sent</DialogTitle>
+            <DialogDescription className="max-w-[400px] text-[15px] leading-[23px]">
+              {target.org.name} gets an email and a notification. You can message each other as soon
+              as they accept.
             </DialogDescription>
-            <dl className="mt-1.5 w-full rounded-md border text-left text-sm">
+            <dl className="mt-2 w-full divide-y rounded-xl border text-left text-sm">
               {projectTitle ? (
                 <div className="flex justify-between gap-3 px-4 py-3">
-                  <dt className="text-subtle-foreground">Project</dt>
+                  <dt className="text-muted-foreground">Project</dt>
                   <dd className="text-right font-semibold">{projectTitle}</dd>
                 </div>
               ) : null}
-              {role && roleOptions.length ? (
-                <div className="flex justify-between gap-3 border-t border-muted px-4 py-3 first:border-t-0">
-                  <dt className="text-subtle-foreground">Role</dt>
+              {role ? (
+                <div className="flex justify-between gap-3 px-4 py-3">
+                  <dt className="text-muted-foreground">You enquired as</dt>
                   <dd className="font-semibold">{labelFor(LOOKING_FOR, role)}</dd>
                 </div>
               ) : null}
-              <div className="flex justify-between gap-3 border-t border-muted px-4 py-3 first:border-t-0">
-                <dt className="text-subtle-foreground">Status</dt>
+              <div className="flex justify-between gap-3 px-4 py-3">
+                <dt className="text-muted-foreground">Status</dt>
                 <dd className="flex items-center gap-1.5 font-semibold text-warning">
-                  <span aria-hidden className="size-2 rounded-full bg-[#C98A16]" />
-                  Pending · expires {expires}
+                  <span aria-hidden className="size-2 rounded-full bg-current" />
+                  Waiting · expires {formatDay(sent.expiresAt)}
                 </dd>
               </div>
             </dl>
-            <div className="mt-1.5 flex w-full gap-2.5">
+            <div className="mt-2 flex w-full gap-2.5">
               <Button asChild variant="outline" className="flex-1">
-                <Link href={routes.workspace.enquiries}>View my enquiries</Link>
+                <Link href={`${routes.workspace.network}?tab=invitations&view=sent`}>
+                  View my enquiries
+                </Link>
               </Button>
               <Button className="flex-1" onClick={() => reset(false)}>
                 Done
@@ -167,52 +192,78 @@ export function SendEnquiryDialog({
           </div>
         ) : (
           <>
-            <div className="border-b border-muted px-6 pt-5 pb-4">
+            {/* Header */}
+            <div className="border-b px-6 pt-5 pr-14 pb-4">
               <DialogTitle className="text-xl">Send enquiry</DialogTitle>
-              <DialogDescription className="sr-only">
-                Send an enquiry with a short note. You can message each other once it is accepted.
+              <DialogDescription className="mt-0.5 text-sm">
+                Introduce yourself. If they accept, you are connected and can message each other.
               </DialogDescription>
             </div>
 
-            <div className="flex flex-col gap-[18px] px-6 py-5">
-              <div className="flex items-center gap-3">
-                <OrgAvatar
-                  initials={target.org.initials}
-                  tint={target.org.tint}
-                  className="size-12"
-                />
-                <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className="flex items-center gap-1.5 text-base font-bold">
-                    {target.org.name}
-                    {target.org.verified ? <VerifiedBadge size="sm" /> : null}
-                  </span>
-                  <span className="text-[13px] text-subtle-foreground">{target.org.meta}</span>
-                </div>
-              </div>
-
-              {target.project ? (
-                <div className="flex items-center gap-3 rounded-md border bg-surface-subtle p-3">
-                  <span
-                    aria-hidden
-                    className="flex size-[52px] shrink-0 items-center justify-center rounded-[10px] text-white"
-                    style={{ backgroundColor: target.project.tint }}
-                  >
-                    <Sun className="size-[22px]" />
-                  </span>
-                  <div className="flex min-w-0 flex-col gap-0.5">
-                    <span className="text-xs text-subtle-foreground">About this project</span>
-                    <span className="text-[15px] font-bold">{target.project.title}</span>
-                    <span className="text-[13px] text-muted-foreground">{target.project.meta}</span>
+            {/* Body */}
+            <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5">
+              {/* Recipient (+ project) */}
+              <div className="overflow-hidden rounded-xl border">
+                <div className="flex items-center gap-3 px-4 py-3.5">
+                  {target.org.logoUrl ? (
+                    <span className="relative size-11 shrink-0 overflow-hidden rounded-[10px] border bg-white">
+                      <Image
+                        src={target.org.logoUrl}
+                        alt=""
+                        fill
+                        sizes="44px"
+                        className="object-cover"
+                      />
+                    </span>
+                  ) : (
+                    <OrgAvatar initials={target.org.initials} tint={target.org.tint} />
+                  )}
+                  <div className="flex min-w-0 flex-col">
+                    <span className="flex items-center gap-1.5 text-[15px] font-bold">
+                      <span className="truncate">{target.org.name}</span>
+                      {target.org.verified ? <VerifiedBadge size="sm" /> : null}
+                    </span>
+                    <span className="truncate text-[13px] text-muted-foreground">
+                      {target.org.meta}
+                    </span>
                   </div>
                 </div>
-              ) : viewerOrg.projects.length ? (
+                {target.project ? (
+                  <div className="flex items-center gap-3 border-t bg-surface-subtle px-4 py-3">
+                    <span
+                      className="relative h-11 w-16 shrink-0 overflow-hidden rounded-lg"
+                      style={{ backgroundColor: target.project.tint }}
+                    >
+                      {target.project.coverUrl ? (
+                        <Image
+                          src={target.project.coverUrl}
+                          alt=""
+                          fill
+                          sizes="64px"
+                          className="object-cover"
+                        />
+                      ) : null}
+                    </span>
+                    <div className="flex min-w-0 flex-col">
+                      <span className="text-xs text-muted-foreground">About this project</span>
+                      <span className="truncate text-sm font-semibold">{target.project.title}</span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        {target.project.meta}
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Own project (from a profile) */}
+              {!fromProject && viewerOrg.projects.length ? (
                 <div className="flex flex-col gap-2">
                   <label htmlFor="enquiry-project" className="text-sm font-semibold">
                     About one of your projects{" "}
-                    <span className="font-normal text-subtle-foreground">(optional)</span>
+                    <span className="font-normal text-muted-foreground">(optional)</span>
                   </label>
                   <Select value={ownProject} onValueChange={setOwnProject}>
-                    <SelectTrigger id="enquiry-project" className="h-11 w-full">
+                    <SelectTrigger id="enquiry-project" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -227,71 +278,72 @@ export function SendEnquiryDialog({
                 </div>
               ) : null}
 
-              {roleOptions.length ? (
-                <fieldset className="flex flex-col gap-2">
-                  <legend className="mb-2 text-sm font-semibold">
+              {/* Role */}
+              {allowed.length ? (
+                <fieldset className="flex flex-col gap-2.5">
+                  <legend className="mb-2.5 text-sm font-semibold">
                     {fromProject ? "You are enquiring as" : `${target.org.name} would join as`}
                   </legend>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {roleOptions.map((r) => {
-                      const ok = fromProject ? canPlay(viewerOrg.category, r) : true;
-                      const on = ok && role === r;
+                  <div
+                    role="radiogroup"
+                    className={cn("grid gap-2", allowed.length > 1 && "sm:grid-cols-2")}
+                  >
+                    {allowed.map((r) => {
+                      const on = role === r;
                       return (
-                        <label
+                        <button
                           key={r}
+                          type="button"
+                          role="radio"
+                          aria-checked={on}
+                          onClick={() => setRole(r)}
                           className={cn(
-                            "flex items-start gap-2.5 rounded-md border px-3.5 py-3",
-                            on ? "border-2 border-primary bg-primary-soft" : "border-border",
-                            ok ? "cursor-pointer" : "cursor-not-allowed opacity-55",
+                            "flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none",
+                            on
+                              ? "border-primary bg-primary-soft ring-1 ring-primary"
+                              : "hover:border-subtle-foreground",
                           )}
                         >
-                          <input
-                            type="radio"
-                            name="enquiry-role"
-                            className="mt-0.5 size-4 accent-primary"
-                            checked={on}
-                            disabled={!ok}
-                            onChange={() => setRole(r)}
-                          />
-                          <span className="flex flex-col gap-0.5">
+                          <span
+                            aria-hidden
+                            className={cn(
+                              "flex size-5 shrink-0 items-center justify-center rounded-full border-2",
+                              on ? "border-primary bg-primary text-white" : "border-input",
+                            )}
+                          >
+                            {on ? <Check className="size-3" strokeWidth={3.5} /> : null}
+                          </span>
+                          <span className="flex flex-col">
                             <span className="text-sm font-semibold">
                               {labelFor(LOOKING_FOR, r)}
                             </span>
-                            <span className="text-xs text-subtle-foreground">
-                              {ok
-                                ? fromProject
-                                  ? "Matches your organisation"
-                                  : "Their role on your project"
-                                : `For ${categoriesText(r)}`}
-                            </span>
+                            <span className="text-xs text-muted-foreground">{ROLE_HELP[r]}</span>
                           </span>
-                        </label>
+                        </button>
                       );
                     })}
                   </div>
-                  {fromProject ? (
-                    <span className="text-xs text-subtle-foreground">
-                      This project is looking for:{" "}
-                      {projectRoles.map((r) => labelFor(LOOKING_FOR, r)).join(", ")}
-                    </span>
+                  {blocked.length ? (
+                    <p className="text-xs text-muted-foreground">
+                      Also looking for: {blocked.map((r) => labelFor(LOOKING_FOR, r)).join(", ")}{" "}
+                      (other organisation types)
+                    </p>
                   ) : null}
                 </fieldset>
-              ) : null}
-
-              {fromProject && !firstAllowed ? (
-                <p className="rounded-md bg-warning-soft px-4 py-3 text-sm leading-5 text-warning">
-                  This project is not looking for a{" "}
-                  {labelFor(ORGANISATION_CATEGORIES, viewerOrg.category).toLowerCase()} right now.
-                  You can still contact {target.org.name} from their profile.
+              ) : fromProject ? (
+                <p className="flex gap-2.5 rounded-xl bg-warning-soft px-4 py-3 text-sm leading-5 text-warning">
+                  <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
+                  This project isn&apos;t looking for a {myCategory} right now. You can still
+                  contact {target.org.name} from their profile.
                 </p>
               ) : null}
 
               {target.match ? (
-                <div className="flex gap-3 rounded-md bg-success-soft px-4 py-3.5">
+                <div className="flex gap-3 rounded-xl bg-success-soft px-4 py-3.5">
                   <span className="shrink-0 text-[22px] leading-[26px] font-bold text-success">
                     {target.match.score}%
                   </span>
-                  <ul className="flex flex-col gap-1 text-[13px] leading-[19px] text-[#1F4F0C]">
+                  <ul className="flex flex-col gap-1 text-[13px] leading-[19px] text-success">
                     {target.match.reasons.slice(0, 3).map((reason) => (
                       <li key={reason}>{reason}</li>
                     ))}
@@ -299,10 +351,33 @@ export function SendEnquiryDialog({
                 </div>
               ) : null}
 
+              {/* Note */}
               <div className="flex flex-col gap-2">
-                <label htmlFor="enquiry-note" className="text-sm font-semibold">
-                  Add a note <span className="font-normal text-subtle-foreground">(optional)</span>
-                </label>
+                <div className="flex items-baseline justify-between gap-3">
+                  <label htmlFor="enquiry-note" className="text-sm font-semibold">
+                    Add a note <span className="font-normal text-muted-foreground">(optional)</span>
+                  </label>
+                  <span className="text-xs text-muted-foreground tabular-nums" aria-live="polite">
+                    {note.length}/{NOTE_MAX}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {QUICK_NOTES.map((q) => (
+                    <button
+                      key={q.label}
+                      type="button"
+                      onClick={() => setNote(q.text)}
+                      className={cn(
+                        "h-8 rounded-full border px-3 text-xs font-medium transition-colors",
+                        note === q.text
+                          ? "border-primary bg-primary-soft text-primary"
+                          : "text-foreground/80 hover:border-primary/50 hover:text-primary",
+                      )}
+                    >
+                      {q.label}
+                    </button>
+                  ))}
+                </div>
                 <Textarea
                   id="enquiry-note"
                   rows={4}
@@ -312,38 +387,33 @@ export function SendEnquiryDialog({
                   placeholder="Say who you are and what you would like to discuss."
                   className="resize-none"
                 />
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {QUICK_NOTES.map((q) => (
-                    <button
-                      key={q.label}
-                      type="button"
-                      onClick={() => setNote(q.text)}
-                      className="h-[30px] rounded-full border px-3 text-xs font-medium text-foreground/80 hover:border-primary hover:text-primary"
-                    >
-                      {q.label}
-                    </button>
-                  ))}
-                  <span className="ml-auto text-xs text-subtle-foreground" aria-live="polite">
-                    {note.length}/{NOTE_MAX}
-                  </span>
-                </div>
               </div>
 
-              <p className="flex gap-2 text-[13px] leading-[19px] text-muted-foreground">
-                <Info className="mt-0.5 size-4 shrink-0 text-subtle-foreground" aria-hidden />
-                If {target.org.name} accepts, you will be connected and can message each other.
-                Enquiries without a reply expire after {ENQUIRY_EXPIRY_DAYS} days.
-              </p>
+              {error ? (
+                <p
+                  role="alert"
+                  className="flex gap-2 rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+                >
+                  <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
+                  {error}
+                </p>
+              ) : null}
             </div>
 
-            <DialogFooter className="border-t border-muted px-6 pt-4 pb-5 max-sm:flex-row">
+            {/* Footer */}
+            <div className="flex flex-wrap items-center gap-3 border-t bg-surface-subtle px-6 py-4">
+              <span className="flex flex-1 items-center gap-1.5 text-xs text-muted-foreground max-sm:basis-full">
+                <Clock3 className="size-3.5 shrink-0" aria-hidden />
+                Expires after {ENQUIRY_EXPIRY_DAYS} days without a reply
+              </span>
               <Button variant="outline" className="max-sm:flex-1" onClick={() => reset(false)}>
                 Cancel
               </Button>
               <Button className="max-sm:flex-1" disabled={!canSend} onClick={send}>
-                Send enquiry
+                {pending ? <Loader2 className="animate-spin" aria-hidden /> : <Send aria-hidden />}
+                {pending ? "Sending…" : "Send enquiry"}
               </Button>
-            </DialogFooter>
+            </div>
           </>
         )}
       </DialogContent>

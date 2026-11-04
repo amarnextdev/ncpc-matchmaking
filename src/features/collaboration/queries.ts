@@ -3,6 +3,9 @@ import { routes } from "@/config/routes";
 import type { Viewer } from "@/types";
 import { MOCK_CONVERSATIONS, MOCK_REQUESTS } from "./data/mock-conversations";
 import type { ConversationView, EnquiryRequest } from "./types";
+import { getSessionUser } from "@/lib/auth/session";
+import { getDbConversations } from "./conversations-db";
+import { getReceivedEnquiries } from "./enquiries-db";
 import { toView } from "./views";
 
 /**
@@ -12,13 +15,21 @@ import { toView } from "./views";
 export async function getConversations(viewer: Viewer): Promise<ConversationView[]> {
   const slug = viewer.org?.slug;
   if (!slug) return [];
-  return MOCK_CONVERSATIONS.map((c) => toView(c, slug)).filter(
-    (c): c is ConversationView => c !== null,
-  );
+  const user = await getSessionUser();
+  const live = await getDbConversations(slug, user?.id ?? null);
+  return (live ?? MOCK_CONVERSATIONS)
+    .map((c) => toView(c, slug))
+    .filter((c): c is ConversationView => c !== null);
 }
 
+/**
+ * Pending enquiries the viewer's organisation received (newest first).
+ * Real organisations read the database; demo organisations keep their mock requests.
+ */
 export async function getEnquiryRequests(viewer: Viewer): Promise<EnquiryRequest[]> {
-  return viewer.org ? (MOCK_REQUESTS[viewer.org.slug] ?? []) : [];
+  if (!viewer.org) return [];
+  const live = await getReceivedEnquiries(viewer.org.slug);
+  return live ?? MOCK_REQUESTS[viewer.org.slug] ?? [];
 }
 
 /** Link to the existing chat with an organisation, if the viewer is already connected to it. */
@@ -28,10 +39,16 @@ export async function getConnectionHref(
 ): Promise<string | undefined> {
   const mine = viewer.org?.slug;
   if (!mine || mine === orgSlug) return undefined;
+  const user = await getSessionUser();
+  const live = await getDbConversations(mine, user?.id ?? null);
+  if (live) {
+    const hit = live.find((x) => x.parties.some((p) => p.slug === orgSlug));
+    return hit ? routes.workspace.chat(hit.id) : undefined;
+  }
   const c = MOCK_CONVERSATIONS.find(
     (x) => x.parties.some((p) => p.slug === mine) && x.parties.some((p) => p.slug === orgSlug),
   );
-  return c ? `${routes.workspace.messages}?c=${c.id}` : undefined;
+  return c ? routes.workspace.chat(c.id) : undefined;
 }
 
 export async function getUnreadCount(viewer: Viewer): Promise<number> {

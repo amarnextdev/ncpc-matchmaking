@@ -99,6 +99,14 @@
   html {
     scroll-behavior: smooth;
   }
+  /* Thin scrollbars in the brand navy (page, dialogs, menus, lists). */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--primary) 35%, transparent) transparent;
+  }
+  *:hover {
+    scrollbar-color: color-mix(in oklab, var(--primary) 60%, transparent) transparent;
+  }
   body {
     @apply bg-background font-sans text-foreground antialiased;
   }

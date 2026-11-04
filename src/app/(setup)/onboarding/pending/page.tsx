@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { redirect } from "next/navigation";
 import { routes } from "@/config/routes";
+import { LiveRefresh } from "@/components/shared/live-refresh";
 import { getSessionUser } from "@/lib/auth/session";
 import { getViewer } from "@/lib/viewer";
 import { cn } from "@/lib/utils";
@@ -100,6 +101,8 @@ export default async function Page() {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Approved / changes / rejected shows up here without a reload */}
+      {user && !rejected ? <LiveRefresh userId={user.id} kinds={["organisation_"]} /> : null}
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         {/* Status */}
         <section

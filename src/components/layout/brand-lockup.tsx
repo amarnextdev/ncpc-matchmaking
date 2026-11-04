@@ -2,12 +2,12 @@ import Link from "next/link";
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { routes } from "@/config/routes";
 
-/** NCPC logo + product name, used in the header. */
-export function BrandLockup() {
+/** NCPC logo + product name, used in the header. Members land on their dashboard. */
+export function BrandLockup({ href = routes.home }: { href?: string }) {
   return (
     <Link
-      href={routes.home}
-      aria-label="NCPC Matchmaking home"
+      href={href}
+      aria-label={href === routes.home ? "NCPC Matchmaking home" : "NCPC Matchmaking dashboard"}
       className="flex shrink-0 items-center gap-4"
     >
       <BrandLogo className="h-9 xl:h-10" priority />

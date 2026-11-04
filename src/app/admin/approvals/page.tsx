@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { routes } from "@/config/routes";
 import { OrgAvatar } from "@/features/admin/approvals/components/org-avatar";
+import { ReviewSwitch } from "@/features/admin/components/review-switch";
+import { countProjectsInReview } from "@/features/admin/projects/queries";
 import { WaitingBadge } from "@/features/admin/approvals/components/waiting-badge";
 import { categoryLabel, formatDate, provinceLabel } from "@/features/admin/approvals/labels";
 import {
@@ -84,10 +86,11 @@ export default async function Page({
     ? (params.tab as ReviewTab)
     : "pending";
   const q = typeof params.q === "string" ? params.q : "";
-  const [counts, stats, rows] = await Promise.all([
+  const [counts, stats, rows, projectsWaiting] = await Promise.all([
     getReviewCounts(),
     getReviewStats(),
     listForReview(tab, q),
+    countProjectsInReview(),
   ]);
   const oldestDays = stats.oldestSubmittedAt
     ? Math.max(0, Math.floor((Date.now() - stats.oldestSubmittedAt.getTime()) / 86_400_000))
@@ -106,6 +109,11 @@ export default async function Page({
             decision within 2–3 working days.
           </p>
         </div>
+        <ReviewSwitch
+          active="organisations"
+          organisations={counts.pending}
+          projects={projectsWaiting}
+        />
       </header>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

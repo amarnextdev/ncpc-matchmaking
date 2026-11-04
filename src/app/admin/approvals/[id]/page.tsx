@@ -381,7 +381,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
             </p>
           </section>
 
-          {org.status === "pending" ? <DecisionPanel orgId={org.id} orgName={org.name} /> : null}
+          {org.status === "pending" ? <DecisionPanel id={org.id} name={org.name} /> : null}
         </aside>
       </div>
     </div>

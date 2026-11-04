@@ -24,7 +24,7 @@ export function SimilarOpportunities({
           </p>
         </div>
         <Link
-          href={`${routes.opportunities.list}?theme=${theme}`}
+          href={routes.explore.section("opportunities", `theme=${theme}`)}
           className="text-sm font-semibold text-primary hover:underline"
         >
           View all opportunities →

@@ -11,6 +11,7 @@ import {
 import { formatRand } from "@/lib/utils";
 import { MOCK_OPPORTUNITIES } from "./data/mock-opportunities";
 import { MOCK_OPPORTUNITY_DETAILS } from "./data/mock-opportunity-details";
+import { getLiveOpportunities, getLiveOpportunityDetail } from "./db-source";
 import { NEED_META } from "./detail-meta";
 import type {
   FacetCount,
@@ -23,10 +24,11 @@ import type {
 
 /**
  * Data access for the Opportunities marketplace.
- * TODO(Module 7): replace MOCK_OPPORTUNITIES with Drizzle queries on `projects` (published only).
+ * Live projects from the database (NCPC approved) come first, then the demo projects.
+ * TODO(launch): drop MOCK_OPPORTUNITIES once there are enough real projects.
  */
 async function source(): Promise<Opportunity[]> {
-  return MOCK_OPPORTUNITIES;
+  return [...(await getLiveOpportunities()), ...MOCK_OPPORTUNITIES];
 }
 
 function matches(o: Opportunity, f: OpportunityFilters): boolean {
@@ -52,10 +54,13 @@ function matches(o: Opportunity, f: OpportunityFilters): boolean {
   return true;
 }
 
+/** Share funded; 0 when the project is not raising capital (avoids dividing by zero). */
+const funded = (o: Opportunity) => (o.capitalNeeded > 0 ? o.capitalRaised / o.capitalNeeded : 0);
+
 const sorters: Record<OpportunityFilters["sort"], (a: Opportunity, b: Opportunity) => number> = {
   newest: (a, b) => b.listedAt.localeCompare(a.listedAt),
   capital: (a, b) => b.capitalNeeded - a.capitalNeeded,
-  funded: (a, b) => b.capitalRaised / b.capitalNeeded - a.capitalRaised / a.capitalNeeded,
+  funded: (a, b) => funded(b) - funded(a),
 };
 
 export async function getOpportunities(filters: OpportunityFilters): Promise<OpportunityPage> {
@@ -151,7 +156,9 @@ function buildDetail(o: Opportunity): OpportunityDetail {
 
 /** One published opportunity with everything the detail page needs, or null (→ 404). */
 export async function getOpportunityBySlug(slug: string): Promise<OpportunityDetail | null> {
-  const base = (await source()).find((o) => o.slug === slug);
+  const live = await getLiveOpportunityDetail(slug);
+  if (live) return live;
+  const base = MOCK_OPPORTUNITIES.find((o) => o.slug === slug);
   return base ? buildDetail(base) : null;
 }
 

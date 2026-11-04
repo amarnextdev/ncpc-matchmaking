@@ -13,6 +13,7 @@ import { formatListed } from "@/lib/dates";
 const capitalise = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 import { ORGANISATION_TABS, TRACK_PAGE_SIZE, TRACK_ROLES, tabForCategory } from "./constants";
 import { MOCK_ORGANISATION_DETAILS } from "./data/mock-organisation-details";
+import { getDbOrganisations } from "./db-source";
 import { MOCK_ORGANISATIONS } from "./data/mock-organisations";
 import type {
   Organisation,
@@ -26,10 +27,12 @@ import type {
 
 /**
  * Data access for the Organisations directory and profiles.
- * TODO(Module 2/4): replace MOCK_ORGANISATIONS with Drizzle queries on `organisations` (approved only).
+ * NCPC-approved organisations from the database come first, then the demo organisations.
+ * TODO(launch): drop MOCK_ORGANISATIONS once there are enough real members.
  */
 async function source(): Promise<Organisation[]> {
-  return MOCK_ORGANISATIONS.filter((o) => o.verified);
+  const { list } = await getDbOrganisations();
+  return [...list, ...MOCK_ORGANISATIONS.filter((o) => o.verified)];
 }
 
 function inTab(o: Organisation, tab: OrganisationFilters["tab"]): boolean {
@@ -152,7 +155,10 @@ function buildDetail(o: Organisation): OrganisationDetail {
 
 export async function getOrganisationBySlug(slug: string): Promise<OrganisationDetail | null> {
   const base = (await source()).find((o) => o.slug === slug);
-  return base ? buildDetail(base) : null;
+  if (!base) return null;
+  const detail = buildDetail(base);
+  const extra = (await getDbOrganisations()).extras.get(slug);
+  return extra ? { ...detail, about: extra.about || detail.about, website: extra.website } : detail;
 }
 
 /** Same type first, then shared themes, then same province. */

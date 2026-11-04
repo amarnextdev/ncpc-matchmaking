@@ -2,16 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import {
-  ChevronDown,
-  ChevronUp,
-  ExternalLink,
-  Maximize2,
-  Minimize2,
-  Search,
-  X,
-} from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { ChevronDown, ChevronUp, Maximize2, Minimize2, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { VerifiedBadge } from "@/components/shared/verified-badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +12,10 @@ import { LOOKING_FOR, ORGANISATION_CATEGORIES, labelFor } from "@/lib/constants"
 import { cn } from "@/lib/utils";
 import type { ViewerOrg } from "@/types";
 import { STAGE_TONE } from "../../constants";
+import { markConversationReadAction, respondEnquiryAction, sendMessageAction } from "../../actions";
+import { DOCK_EVENT } from "../../dock-events";
+import { useChatRealtime } from "../../use-chat-realtime";
+import { isDbId } from "../../use-live-messages";
 import type { ConversationView, Deal, DealDocument, EnquiryRequest, Message } from "../../types";
 import { dealStageLabel } from "../../views";
 import { DealPanel } from "../messages/deal-panel";
@@ -28,8 +24,6 @@ import { OrgAvatar } from "../org-avatar";
 
 type Tab = "all" | "unread" | "requests";
 const MAX_WINDOWS = 2;
-
-const fullView = (id: string) => `${routes.workspace.messages}?c=${id}`;
 
 /**
  * LinkedIn-style messaging dock (bottom-right, desktop only, members only).
@@ -50,6 +44,7 @@ export function MessagingDock({
   const [tab, setTab] = useState<Tab>("all");
   const [windows, setWindows] = useState<string[]>([]);
   const [minimised, setMinimised] = useState<Record<string, boolean>>({});
+  const router = useRouter();
   const [answered, setAnswered] = useState<Record<string, "accepted" | "declined">>({});
   const [sent, setSent] = useState<Record<string, Message[]>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -61,11 +56,57 @@ export function MessagingDock({
   const [started, setStarted] = useState<Record<string, true>>({});
   const [docs, setDocs] = useState<Record<string, DealDocument["status"]>>({});
 
-  if (pathname.startsWith(routes.workspace.messages)) return null;
+  // Live chat: instant messages, typing and seen; fresh server data replaces optimistic messages.
+  const rt = useChatRealtime(conversations, { name: viewerOrg.name });
+  useEffect(() => setSent({}), [conversations]);
 
-  const unread = conversations.reduce((sum, c) => sum + c.unread, 0);
+  // A message arriving in an open chat is read straight away.
+  useEffect(() => {
+    for (const id of Object.keys(rt.lastIncomingAt)) {
+      const c = conversations.find((x) => x.id === id);
+      if (c && windows.includes(id) && !minimised[id] && document.visibilityState === "visible") {
+        void markConversationReadAction(id);
+        rt.sendRead(id, c.me.slug);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when something new arrives
+  }, [rt.lastIncomingAt]);
+
+  // Open from the header icon / "Message" buttons (openDock) or from links (?chat=… / ?dock=1).
+  useEffect(() => {
+    const openChat = (id: string | null) => {
+      setListOpen(id ? false : true);
+      if (id) {
+        setWindows((w) => [id, ...w.filter((x) => x !== id)].slice(0, MAX_WINDOWS));
+        setMinimised((m) => ({ ...m, [id]: false }));
+      }
+    };
+    const onEvent = (e: Event) =>
+      openChat((e as CustomEvent<{ chat: string | null }>).detail?.chat ?? null);
+    window.addEventListener(DOCK_EVENT, onEvent);
+    const params = new URLSearchParams(window.location.search);
+    const chat = params.get("chat");
+    if (chat || params.get("dock")) {
+      openChat(chat);
+      params.delete("chat");
+      params.delete("dock");
+      const q = params.toString();
+      window.history.replaceState(null, "", `${window.location.pathname}${q ? `?${q}` : ""}`);
+    }
+    return () => window.removeEventListener(DOCK_EVENT, onEvent);
+  }, [pathname]);
+
+  const isOpenChat = (id: string) => windows.includes(id) && !minimised[id];
+  const unreadOf = (c: ConversationView) =>
+    isOpenChat(c.id) ? 0 : c.unread + (rt.incoming[c.id]?.length ?? 0);
+  const unread = conversations.reduce((sum, c) => sum + unreadOf(c), 0);
+  /** Server messages + live ones + my optimistic ones; "Sent" turns "Seen" when they read it. */
+  const messagesOf = (c: ConversationView): Message[] =>
+    [...c.messages, ...(rt.incoming[c.id] ?? []), ...(sent[c.id] ?? [])].map((m) =>
+      rt.seen[c.id] && m.kind === "post" && m.status === "sent" ? { ...m, status: "seen" } : m,
+    );
   const pending = requests.filter((r) => !answered[r.id]).length;
-  const list = tab === "unread" ? conversations.filter((c) => c.unread) : conversations;
+  const list = tab === "unread" ? conversations.filter((c) => unreadOf(c)) : conversations;
 
   function openDeal(id: string) {
     setWindows([id]);
@@ -76,6 +117,11 @@ export function MessagingDock({
   }
 
   function open(id: string) {
+    const c = conversations.find((x) => x.id === id);
+    if (c && isDbId(id)) {
+      rt.sendRead(id, c.me.slug);
+      if (unreadOf(c)) void markConversationReadAction(id).then(() => rt.scheduleSync());
+    }
     if (dealOf && dealOf !== id) setDealOf(null);
     setWindows((w) => [id, ...w.filter((x) => x !== id)].slice(0, MAX_WINDOWS));
     setMinimised((m) => ({ ...m, [id]: false }));
@@ -86,25 +132,76 @@ export function MessagingDock({
     if (!text) return;
     const d = new Date();
     const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    const tempId = `s-${Date.now()}`;
+    rt.stopTyping(c.id, c.me.slug);
     setSent((s) => ({
       ...s,
       [c.id]: [
         ...(s[c.id] ?? []),
         {
-          id: `s-${Date.now()}`,
+          id: tempId,
           kind: "post",
           from: c.me.slug,
           person: c.me.contact.name,
           time,
           text,
+          status: "sending" as const,
         },
       ],
     }));
     setDrafts((s) => ({ ...s, [c.id]: "" }));
+    if (isDbId(c.id)) {
+      const mark = (status: "sent" | "failed") =>
+        setSent((s) => ({
+          ...s,
+          [c.id]: (s[c.id] ?? []).flatMap((m) =>
+            m.id !== tempId || m.kind !== "post"
+              ? [m]
+              : status === "sent"
+                ? [{ ...m, status: "sent" as const }]
+                : [],
+          ),
+        }));
+      void sendMessageAction({ conversationId: c.id, body: text })
+        .then((r) => {
+          if (r.ok) {
+            mark("sent");
+            rt.scheduleSync();
+          } else {
+            mark("failed");
+            setDrafts((s) => ({ ...s, [c.id]: text }));
+            toast.error(r.error);
+          }
+        })
+        .catch(() => {
+          mark("failed");
+          setDrafts((s) => ({ ...s, [c.id]: text }));
+          toast.error("We could not send the message. Your text is back in the box.");
+        });
+    }
   }
 
-  function answer(r: EnquiryRequest, result: "accepted" | "declined") {
-    setAnswered((a) => ({ ...a, [r.id]: result }));
+  async function answer(r: EnquiryRequest, result: "accepted" | "declined") {
+    // Database enquiries have uuid ids; demo requests are answered in memory only.
+    if (/^[0-9a-f-]{36}$/i.test(r.id)) {
+      setAnswered((a) => ({ ...a, [r.id]: result }));
+      const res = await respondEnquiryAction({
+        enquiryId: r.id,
+        decision: result === "accepted" ? "accept" : "decline",
+      }).catch(() => ({ ok: false as const, error: "We could not save your answer." }));
+      if (!res.ok) {
+        setAnswered((a) => {
+          const next = { ...a };
+          delete next[r.id];
+          return next;
+        });
+        toast.error(res.error);
+        return;
+      }
+      router.refresh();
+    } else {
+      setAnswered((a) => ({ ...a, [r.id]: result }));
+    }
     toast.success(
       result === "accepted" ? `You are now connected with ${r.from.name}` : "Enquiry declined",
     );
@@ -144,7 +241,7 @@ export function MessagingDock({
   }
 
   return (
-    <div className="fixed right-6 bottom-0 z-40 hidden items-end gap-3 lg:flex">
+    <div className="pointer-events-none fixed right-6 bottom-0 z-40 flex items-end gap-3 max-lg:inset-0 max-lg:right-0 [&>*]:pointer-events-auto">
       {[...windows].reverse().map((id) => {
         const c = conversations.find((x) => x.id === id);
         if (!c) return null;
@@ -152,8 +249,7 @@ export function MessagingDock({
         const isOpen = !minimised[id];
         const isBig = big === id && isOpen;
         const deal = currentDeal(c);
-        const all = [...c.messages, ...(sent[id] ?? [])];
-        const messages = isBig ? all : all.filter((m) => m.kind !== "divider").slice(-6);
+        const messages = messagesOf(c);
         const dealWindow =
           dealOf === id && deal ? (
             <section
@@ -162,6 +258,8 @@ export function MessagingDock({
               className={cn(
                 "flex w-[380px] flex-col overflow-hidden rounded-t-[14px] border border-b-0 bg-card shadow-[0_-8px_32px_rgb(15_23_42/0.14)]",
                 dealMin ? "h-14" : "h-[580px]",
+                // Phones: full screen, above the chat
+                "max-lg:fixed max-lg:inset-0 max-lg:z-50 max-lg:h-dvh max-lg:w-full max-lg:rounded-none max-lg:border-0",
               )}
             >
               <div className="flex h-14 shrink-0 items-center gap-1 border-b pr-2 pl-3">
@@ -176,17 +274,6 @@ export function MessagingDock({
                     with {c.them.name}
                   </span>
                 </button>
-                <Button
-                  asChild
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Open in Messages"
-                  title="Open in Messages"
-                >
-                  <Link href={fullView(id)}>
-                    <ExternalLink aria-hidden />
-                  </Link>
-                </Button>
                 <Button
                   variant="ghost"
                   size="icon-sm"
@@ -230,6 +317,10 @@ export function MessagingDock({
               "flex flex-col overflow-hidden rounded-t-[14px] border border-b-0 bg-card shadow-[0_-8px_32px_rgb(15_23_42/0.14)] transition-[width,height] duration-200",
               isBig ? "w-[min(720px,calc(100vw-420px))]" : "w-[440px]",
               !isOpen ? "h-14" : isBig ? "h-[min(860px,calc(100dvh-88px))]" : "h-[580px]",
+              // Phones: the newest chat full screen, others hidden
+              id === windows[0]
+                ? "max-lg:fixed max-lg:inset-0 max-lg:z-40 max-lg:h-dvh max-lg:w-full max-lg:rounded-none max-lg:border-0"
+                : "max-lg:hidden",
             )}
           >
             <div className="flex h-14 shrink-0 items-center gap-1 border-b pr-2 pl-3">
@@ -312,6 +403,7 @@ export function MessagingDock({
                 <DockMessages
                   conversation={c}
                   messages={messages}
+                  typing={rt.typing[id]}
                   compact={!isBig}
                   dealStarted={dealStarted}
                   onStartDeal={(dealId) => startDeal(c, dealId)}
@@ -330,7 +422,10 @@ export function MessagingDock({
                     id={`dock-${id}`}
                     rows={2}
                     value={drafts[id] ?? ""}
-                    onChange={(e) => setDrafts((s) => ({ ...s, [id]: e.target.value }))}
+                    onChange={(e) => {
+                      setDrafts((s) => ({ ...s, [id]: e.target.value }));
+                      if (e.target.value.trim()) rt.sendTyping(id, c.me.slug);
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
@@ -364,6 +459,10 @@ export function MessagingDock({
         className={cn(
           "flex w-[340px] flex-col overflow-hidden rounded-t-[14px] border border-b-0 bg-card shadow-[0_-8px_32px_rgb(15_23_42/0.14)]",
           listOpen ? "h-[600px]" : "h-14",
+          // Phones: only when opened (header icon), full screen
+          listOpen
+            ? "max-lg:fixed max-lg:inset-0 max-lg:z-30 max-lg:h-dvh max-lg:w-full max-lg:rounded-none max-lg:border-0"
+            : "max-lg:hidden",
         )}
       >
         <div
@@ -390,17 +489,6 @@ export function MessagingDock({
               </span>
             ) : null}
           </button>
-          <Button
-            asChild
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Open full view"
-            title="Open full view"
-          >
-            <Link href={routes.workspace.messages}>
-              <Maximize2 aria-hidden />
-            </Link>
-          </Button>
           <Button
             variant="ghost"
             size="icon-sm"
@@ -465,13 +553,16 @@ export function MessagingDock({
                           About <strong>{r.project}</strong> · as {labelFor(LOOKING_FOR, r.role)}
                         </span>
                         <span className="text-[11px] text-subtle-foreground">
-                          {r.sentAgo} · {r.match}% match
+                          {r.sentAgo}
+                          {r.match ? ` · ${r.match}% match` : ""}
                         </span>
                       </span>
                     </div>
-                    <p className="rounded-[8px] bg-surface-subtle px-2.5 py-2 text-xs leading-[18px] text-foreground/80">
-                      “{r.note}”
-                    </p>
+                    {r.note ? (
+                      <p className="rounded-[8px] bg-surface-subtle px-2.5 py-2 text-xs leading-[18px] text-foreground/80">
+                        “{r.note}”
+                      </p>
+                    ) : null}
                     {answered[r.id] ? (
                       <span
                         className={cn(
@@ -507,10 +598,10 @@ export function MessagingDock({
                 ) : null}
                 <li className="self-center">
                   <Link
-                    href={routes.workspace.enquiries}
+                    href={routes.workspace.network}
                     className="p-1.5 text-xs font-semibold text-primary hover:underline"
                   >
-                    See all enquiries
+                    See all invitations
                   </Link>
                 </li>
               </ul>
@@ -532,7 +623,7 @@ export function MessagingDock({
                           <span
                             className={cn(
                               "truncate text-sm",
-                              c.unread ? "font-bold" : "font-semibold",
+                              unreadOf(c) ? "font-bold" : "font-semibold",
                             )}
                           >
                             {c.them.name}
@@ -543,11 +634,25 @@ export function MessagingDock({
                         </span>
                         <span
                           className={cn(
-                            "truncate text-xs",
-                            c.unread ? "font-semibold text-foreground" : "text-subtle-foreground",
+                            "flex items-center gap-1.5 truncate text-xs",
+                            rt.typing[c.id]
+                              ? "font-semibold text-success"
+                              : unreadOf(c)
+                                ? "font-semibold text-foreground"
+                                : "text-subtle-foreground",
                           )}
                         >
-                          {c.preview}
+                          <span className="truncate">
+                            {rt.typing[c.id]
+                              ? "Typing…"
+                              : ((rt.incoming[c.id]?.at(-1) as { text?: string } | undefined)
+                                  ?.text ?? c.preview)}
+                          </span>
+                          {unreadOf(c) ? (
+                            <span className="ml-auto flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-white">
+                              {unreadOf(c)}
+                            </span>
+                          ) : null}
                         </span>
                         <span className="truncate text-[11px] font-semibold text-primary">
                           {c.tag}
@@ -574,12 +679,15 @@ export function MessagingDock({
 function DockMessages({
   conversation: c,
   messages,
+  typing,
   compact,
   dealStarted,
   onStartDeal,
 }: {
   conversation: ConversationView;
   messages: Message[];
+  /** Name of whoever is typing on the other side */
+  typing?: string;
   compact: boolean;
   dealStarted: (dealId: string) => boolean;
   onStartDeal: (dealId: string) => void;
@@ -588,27 +696,47 @@ function DockMessages({
   useEffect(() => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length, compact]);
+  }, [messages.length, compact, typing]);
   return (
     <ol
       ref={listRef}
-      className={cn(
-        "flex flex-1 flex-col gap-3.5 overflow-y-auto",
-        compact ? "p-3.5" : "px-5 py-4",
-      )}
+      className={cn("flex flex-1 flex-col overflow-y-auto", compact ? "px-3.5 py-3" : "px-5 py-4")}
     >
-      {messages.map((m) => (
-        <li key={m.id} className="flex flex-col">
-          <MessageItem
-            message={m}
-            parties={[c.me, c.them]}
-            mySlug={c.me.slug}
-            compact={compact}
-            dealStarted={dealStarted}
-            onStartDeal={onStartDeal}
-          />
+      {messages.map((m, i) => {
+        const side = (x?: Message) => (x && x.kind === "post" ? x.from : null);
+        const me = side(m);
+        return (
+          <li key={m.id} className="flex flex-col">
+            <MessageItem
+              message={m}
+              parties={[c.me, c.them]}
+              mySlug={c.me.slug}
+              compact={compact}
+              dealStarted={dealStarted}
+              onStartDeal={onStartDeal}
+              first={side(messages[i - 1]) !== me}
+              last={side(messages[i + 1]) !== me}
+            />
+          </li>
+        );
+      })}
+      {typing ? (
+        <li className="mt-2.5 flex items-center gap-2" aria-live="polite">
+          <span
+            className="flex gap-1 rounded-[16px_16px_16px_4px] bg-muted px-3 py-2.5"
+            aria-hidden
+          >
+            {[0, 150, 300].map((d) => (
+              <span
+                key={d}
+                className="size-1.5 animate-bounce rounded-full bg-muted-foreground/70"
+                style={{ animationDelay: `${d}ms`, animationDuration: "1s" }}
+              />
+            ))}
+          </span>
+          <span className="text-[11px] text-muted-foreground">{typing} is typing…</span>
         </li>
-      ))}
+      ) : null}
     </ol>
   );
 }

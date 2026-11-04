@@ -18,7 +18,7 @@ export function MemberMatchBanner({ projects, offers }: { projects: string[]; of
         <p className="text-sm text-foreground/80">{projects.join(" · ")}</p>
       </div>
       <Button asChild size="sm" className="bg-success hover:bg-success/90">
-        <Link href={`${routes.funding.list}?eligible=1`}>Show my matches</Link>
+        <Link href={routes.explore.section("funding", "eligible=1")}>Show my matches</Link>
       </Button>
     </div>
   );

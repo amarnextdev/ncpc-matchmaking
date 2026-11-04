@@ -4,16 +4,14 @@ import {
   ClipboardCheck,
   FolderKanban,
   Handshake,
-  Inbox,
   LayoutDashboard,
-  MessageSquare,
   Settings,
-  Sparkles,
   Users,
   Wallet,
 } from "lucide-react";
 import { routes } from "@/config/routes";
-import type { NavGroup, NavItem } from "@/types";
+import type { OrganisationCategory } from "@/lib/constants";
+import type { NavGroup, NavItem, Viewer } from "@/types";
 
 export const siteConfig = {
   name: "NCPC Matchmaking",
@@ -31,12 +29,98 @@ export const siteConfig = {
   },
 } as const;
 
-/** Public header navigation. */
-export const mainNav: NavItem[] = [
+/**
+ * Header navigation, by role. One list per role so links are never doubled:
+ *   visitor  → Explore · How it works
+ *   member   → Dashboard · Explore · My projects | My offers  (Network and Messages are icons)
+ *   staff    → Explore · Admin panel
+ * Messages and Alerts are icons on the right; profile and settings live in the avatar menu.
+ */
+export type HeaderLink = {
+  title: string;
+  href: string;
+  /** Paths that make this link active (prefix match unless `exact`). */
+  match: string[];
+  exact?: boolean;
+  /** Small count badge, e.g. new enquiries. */
+  count?: number;
+};
+
+/** Paths that belong to Explore (the three browse sections). */
+const exploreMatch = [routes.explore.root, "/opportunities", "/organisations", "/funding"];
+
+/** Categories that publish projects (get "My projects"). Investors only browse; funders publish offers. */
+const LISTS_PROJECTS: OrganisationCategory[] = [
+  "project_developer",
+  "industrial_park",
+  "sez",
+  "tenant",
+  "property_developer",
+  "esco",
+  "technology_provider",
+];
+
+export type ViewerRole = "visitor" | "member" | "staff";
+
+export function roleOf(viewer: Viewer): ViewerRole {
+  if (viewer.signedIn && viewer.org) return "member";
+  if (viewer.account?.isAdmin) return "staff";
+  return "visitor";
+}
+
+/** The member's own-work link, if their category has one. */
+export function workLinkFor(category: OrganisationCategory): HeaderLink | null {
+  if (category === "funder") {
+    return { title: "My offers", href: routes.workspace.offers, match: [routes.workspace.offers] };
+  }
+  if (LISTS_PROJECTS.includes(category)) {
+    return {
+      title: "My projects",
+      href: routes.workspace.projects,
+      match: [routes.workspace.projects],
+    };
+  }
+  return null;
+}
+
+export function headerNavFor(viewer: Viewer, _counts: { enquiries?: number } = {}): HeaderLink[] {
+  const explore: HeaderLink = {
+    title: "Explore",
+    href: routes.explore.root,
+    match: exploreMatch,
+  };
+  const role = roleOf(viewer);
+  if (role === "member" && viewer.org) {
+    const work = workLinkFor(viewer.org.category);
+    return [
+      {
+        title: "Dashboard",
+        href: routes.workspace.root,
+        match: [routes.workspace.root, routes.workspace.recommended],
+        exact: true,
+      },
+      explore,
+      ...(work ? [work] : []),
+    ];
+  }
+  if (role === "staff") {
+    return [explore, { title: "Admin panel", href: routes.admin.root, match: [routes.admin.root] }];
+  }
+  return [explore, { title: "How it works", href: routes.about, match: [routes.about] }];
+}
+
+/** Is a header link active for this pathname? */
+export function isLinkActive(link: Pick<HeaderLink, "match" | "exact">, pathname: string) {
+  return link.match.some((m) =>
+    link.exact ? pathname === m : pathname === m || pathname.startsWith(`${m}/`),
+  );
+}
+
+/** The browse sections, used in the mobile menu and the Explore tabs. */
+export const exploreNav: NavItem[] = [
   { title: "Opportunities", href: routes.opportunities.list },
-  { title: "Organisations", href: routes.organisations.list, comingSoon: true },
-  { title: "Funding", href: routes.funding.list, comingSoon: true },
-  { title: "About", href: routes.about, comingSoon: true },
+  { title: "Organisations", href: routes.organisations.list },
+  { title: "Funding", href: routes.funding.list },
 ];
 
 /** Footer link groups. */
@@ -63,17 +147,6 @@ export const footerNav: NavGroup[] = [
       { title: "Terms of use", href: routes.terms },
     ],
   },
-];
-
-/** Member workspace tabs (shown under the public header). */
-export const workspaceNav: NavItem[] = [
-  { title: "Overview", href: routes.workspace.root, icon: LayoutDashboard },
-  { title: "Recommended", href: routes.workspace.recommended, icon: Sparkles },
-  { title: "Messages", href: routes.workspace.messages, icon: MessageSquare },
-  { title: "Enquiries", href: routes.workspace.enquiries, icon: Inbox },
-  { title: "My projects", href: routes.workspace.projects, icon: FolderKanban },
-  { title: "Organisation", href: routes.workspace.organisation, icon: Building2 },
-  { title: "Settings", href: routes.workspace.settings, icon: Settings },
 ];
 
 /** NCPC admin sidebar. */

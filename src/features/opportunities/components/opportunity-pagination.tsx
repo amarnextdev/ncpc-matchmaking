@@ -14,8 +14,7 @@ function pageHref(f: OpportunityFilters, page: number) {
   if (f.capital) p.set(OPPORTUNITY_PARAMS.capital, f.capital);
   if (f.sort !== "newest") p.set(OPPORTUNITY_PARAMS.sort, f.sort);
   if (page > 1) p.set(OPPORTUNITY_PARAMS.page, String(page));
-  const query = p.toString();
-  return query ? `${routes.opportunities.list}?${query}` : routes.opportunities.list;
+  return routes.explore.section("opportunities", p.toString());
 }
 
 type Props = {

@@ -3,7 +3,6 @@
 import { useState } from "react";
 import type * as React from "react";
 import { Banknote, Layers, Search } from "lucide-react";
-import { Container } from "@/components/layout/container";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
@@ -11,9 +10,7 @@ import { THEMES } from "@/lib/constants";
 import { FUNDING_AMOUNTS } from "../constants";
 import { useFundingParams } from "../use-funding-params";
 
-const POPULAR = ["Solar loans", "Energy efficiency grant", "Water reuse", "Green hydrogen", "SME"];
-
-/** Search card overlapping the bottom of the navy hero. */
+/** Search bar inside the Explore hero: keywords · two quick filters · Search. */
 export function FundingSearch() {
   const params = useFundingParams();
   const [q, setQ] = useState(params.get("q"));
@@ -26,74 +23,61 @@ export function FundingSearch() {
   }
 
   return (
-    <Container className="relative -mt-11">
-      <form
-        role="search"
-        aria-label="Search funding"
-        onSubmit={submit}
-        className="flex flex-col gap-4 rounded-lg border bg-card p-5 shadow-overlay"
-      >
-        <div className="flex flex-wrap gap-3">
-          <div className="relative flex flex-[3_1_300px] items-center">
-            <Search
-              className="pointer-events-none absolute left-4 size-[18px] text-subtle-foreground"
-              aria-hidden
-            />
-            <label htmlFor="funding-q" className="sr-only">
-              Search funding offers
-            </label>
-            <Input
-              id="funding-q"
-              type="search"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Offer, funder or keyword"
-              className="h-[50px] pl-11"
-            />
-          </div>
-          <Combobox
-            aria-label="Theme"
-            size="lg"
-            icon={Layers}
-            options={THEMES}
-            allLabel="All themes"
-            searchable={false}
-            value={theme}
-            onValueChange={setTheme}
-            className="flex-[1_1_190px]"
+    <form
+      role="search"
+      aria-label="Search funding"
+      onSubmit={submit}
+      className="rounded-2xl bg-card p-2 shadow-overlay ring-ring/30 transition-shadow focus-within:ring-[3px]"
+    >
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-0">
+        <div className="relative flex items-center md:flex-[3_1_0%]">
+          <Search
+            className="pointer-events-none absolute left-4 size-[18px] text-subtle-foreground"
+            aria-hidden
           />
-          <Combobox
-            aria-label="Amount"
-            size="lg"
-            icon={Banknote}
-            options={FUNDING_AMOUNTS}
-            allLabel="Any amount"
-            searchable={false}
-            value={amount}
-            onValueChange={setAmount}
-            className="flex-[1_1_190px]"
+          <label htmlFor="funding-q" className="sr-only">
+            Search funding offers
+          </label>
+          <Input
+            id="funding-q"
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Offer, funder or keyword"
+            className="h-[52px] rounded-xl border-0 bg-muted/60 pl-11 shadow-none focus-visible:ring-0 md:rounded-none md:bg-transparent"
           />
-          <Button type="submit" size="lg" className="h-[50px] px-8" disabled={params.isPending}>
-            Search
-          </Button>
         </div>
-        <div className="flex flex-wrap items-center gap-2 border-t border-muted pt-3.5">
-          <span className="mr-1 text-[13px] text-subtle-foreground">Popular searches:</span>
-          {POPULAR.map((term) => (
-            <button
-              key={term}
-              type="button"
-              onClick={() => {
-                setQ(term);
-                params.set({ q: term });
-              }}
-              className="rounded-sm bg-muted px-3 py-1.5 text-[13px] font-medium text-foreground/80 hover:bg-primary-soft hover:text-primary"
-            >
-              {term}
-            </button>
-          ))}
-        </div>
-      </form>
-    </Container>
+        <Combobox
+          aria-label="Theme"
+          size="lg"
+          icon={Layers}
+          options={THEMES}
+          allLabel="All themes"
+          searchable={false}
+          value={theme}
+          onValueChange={setTheme}
+          className="h-[52px] rounded-xl border-0 bg-muted/60 shadow-none md:flex-[1_1_0%] md:rounded-none md:border-l md:bg-transparent"
+        />
+        <Combobox
+          aria-label="Amount"
+          size="lg"
+          icon={Banknote}
+          options={FUNDING_AMOUNTS}
+          allLabel="Any amount"
+          searchable={false}
+          value={amount}
+          onValueChange={setAmount}
+          className="h-[52px] rounded-xl border-0 bg-muted/60 shadow-none md:flex-[1_1_0%] md:rounded-none md:border-l md:bg-transparent"
+        />
+        <Button
+          type="submit"
+          size="lg"
+          className="h-12 rounded-full px-8 md:ml-2"
+          disabled={params.isPending}
+        >
+          Search
+        </Button>
+      </div>
+    </form>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useCallback, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { EXPLORE_TAB_PARAM } from "@/config/routes";
 
 /** Map of filter name → URL key, e.g. { q: "q", theme: "theme", page: "page" }. Must include `page`. */
 export type FilterKeyMap = Record<string, string> & { page: string };
@@ -69,6 +70,9 @@ export function useFilterParams<M extends FilterKeyMap>(keys: M) {
   const clearFilters = useCallback(
     (keep: Key[] = ["q", "sort"] as Key[]) => {
       const next = new URLSearchParams();
+      // Stay on the same Explore tab.
+      const section = searchParams.get(EXPLORE_TAB_PARAM);
+      if (section) next.set(EXPLORE_TAB_PARAM, section);
       for (const key of keep) {
         const urlKey = keys[key] as string | undefined;
         const value = urlKey ? searchParams.get(urlKey) : null;

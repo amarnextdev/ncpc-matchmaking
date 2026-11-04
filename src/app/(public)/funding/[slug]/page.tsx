@@ -65,7 +65,7 @@ export default async function FundingOfferPage({ params }: PageProps) {
           </Link>
           <span aria-hidden>/</span>
           <Link
-            href={`${routes.funding.list}?type=${type.value}`}
+            href={routes.explore.section("funding", `type=${type.value}`)}
             className="hover:text-foreground"
           >
             {type.plural}

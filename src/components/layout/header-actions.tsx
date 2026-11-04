@@ -1,11 +1,16 @@
 import Link from "next/link";
-import { Bell, MessageSquare, Search, Users } from "lucide-react";
+import { Bell, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AccountMenu } from "@/components/layout/account-menu";
+import { MessagesButton } from "@/components/layout/messages-button";
 import { routes } from "@/config/routes";
 import { homeForStatus } from "@/features/auth/home";
+import { labelFor, ORGANISATION_CATEGORIES } from "@/lib/constants";
+import { NotificationBell } from "@/features/notifications/components/notification-bell";
+import type { BellData } from "@/features/notifications/queries";
 import type { Viewer } from "@/types";
 
+/** Round icon button with an optional count (Messages) or dot (Alerts). */
 function IconLink({
   href,
   label,
@@ -20,63 +25,70 @@ function IconLink({
   return (
     <Link
       href={href}
-      className="relative flex flex-col items-center gap-0.5 rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+      title={label}
+      aria-label={count ? `${label}, ${count} unread` : label}
+      className="relative flex size-11 items-center justify-center rounded-full text-foreground/80 transition-colors hover:bg-muted hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none"
     >
-      <Icon className="size-[22px]" aria-hidden />
-      {label}
+      <Icon className="size-[21px]" strokeWidth={2} aria-hidden />
       {count ? (
-        <span className="absolute top-0 right-2 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-destructive px-1 text-[11px] font-bold text-white">
-          <span className="sr-only">, </span>
-          {count}
-          <span className="sr-only"> new</span>
+        <span
+          aria-hidden
+          className="absolute top-1 right-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-background bg-destructive px-1 text-[10px] font-bold text-white tabular-nums"
+        >
+          {count > 99 ? "99+" : count}
         </span>
       ) : null}
     </Link>
   );
 }
 
-/** Right side of the header: visitors get Sign in / Register; members get Network, Messages, Alerts and their organisation. */
+/**
+ * Right side of the header.
+ *   visitor → Sign in · Register organisation
+ *   member  → Messages · Alerts · avatar menu (profile, settings, sign out)
+ *   staff   → avatar menu
+ *   still registering → a status button + avatar menu
+ */
 export function HeaderActions({
   viewer,
   unread = 0,
   requests = 0,
+  bell,
 }: {
   viewer: Viewer;
   unread?: number;
+  /** Pending invitations (Network badge) */
   requests?: number;
+  bell?: { userId: string; data: BellData };
 }) {
   if (viewer.signedIn && viewer.org) {
     return (
       <div className="hidden items-center gap-1 lg:flex">
         <IconLink
-          href={routes.workspace.enquiries}
+          href={routes.workspace.network}
           label="My network"
-          icon={Users}
+          icon={UsersRound}
           count={requests}
         />
-        <IconLink
-          href={routes.workspace.messages}
-          label="Messages"
-          icon={MessageSquare}
-          count={unread}
-        />
-        <IconLink href={routes.workspace.notifications} label="Alerts" icon={Bell} />
+        <MessagesButton count={unread} />
+        {bell ? (
+          <NotificationBell userId={bell.userId} initial={bell.data} />
+        ) : (
+          <IconLink href={routes.workspace.notifications} label="Alerts" icon={Bell} />
+        )}
         <AccountMenu
+          kind="member"
           label={viewer.org.name}
-          sublabel="Verified member"
+          sublabel={`Verified member · ${labelFor(ORGANISATION_CATEGORIES, viewer.org.category)}`}
           tint={viewer.org.tint}
-          member
         />
       </div>
     );
   }
   if (viewer.account?.isAdmin) {
     return (
-      <div className="hidden items-center gap-2 lg:flex">
-        <Button asChild>
-          <Link href={routes.admin.root}>Admin panel</Link>
-        </Button>
-        <AccountMenu label={viewer.account.name} sublabel="NCPC staff" member={false} admin />
+      <div className="hidden items-center lg:flex">
+        <AccountMenu kind="staff" label={viewer.account.name} sublabel="NCPC staff" />
       </div>
     );
   }
@@ -91,18 +103,16 @@ export function HeaderActions({
             {reviewing ? "Under review" : blocked ? "Registration status" : "Finish registration"}
           </Link>
         </Button>
-        <AccountMenu label={viewer.account.name} sublabel={viewer.account.email} member={false} />
+        <AccountMenu
+          kind="registering"
+          label={viewer.account.name}
+          sublabel={viewer.account.email}
+        />
       </div>
     );
   }
   return (
     <div className="hidden items-center gap-2 lg:flex">
-      <Button variant="ghost" size="icon" aria-label="Search opportunities" asChild>
-        <Link href={routes.opportunities.list}>
-          <Search className="size-5" />
-        </Link>
-      </Button>
-      <span aria-hidden className="mx-1 h-6 w-px bg-border" />
       <Button variant="ghost" className="text-primary" asChild>
         <Link href={routes.auth.signIn}>Sign in</Link>
       </Button>

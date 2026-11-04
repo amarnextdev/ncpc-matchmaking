@@ -3,9 +3,12 @@ import {
   bigint,
   boolean,
   check,
+  date,
   index,
   integer,
+  jsonb,
   pgTable,
+  smallint,
   text,
   timestamp,
   uniqueIndex,
@@ -49,6 +52,19 @@ export const projects = pgTable(
     capitalNeeded: bigint({ mode: "number" }),
     /** Sum of confirmed investor/funder partnerships, kept up to date on confirm */
     capitalRaised: bigint({ mode: "number" }).notNull().default(0),
+    /** Own funds or earlier partners, entered by the owner (shown as "already raised") */
+    ownFunds: bigint({ mode: "number" }).notNull().default(0),
+    /** Expected impact per year (shown on the project page, used in NCPC reports) */
+    impactCo2Tonnes: integer(),
+    impactMwh: integer(),
+    impactJobs: integer(),
+    impactWaterM3: integer("impact_water_m3"),
+    expectedStart: date(),
+    /** NCPC review: submitted → live, changes_requested (with a note) or rejected */
+    submittedAt: timestamp({ withTimezone: true }),
+    reviewNote: text(),
+    reviewedAt: timestamp({ withTimezone: true }),
+    reviewedBy: uuid().references(() => authUsers.id, { onDelete: "set null" }),
     listedAt: timestamp({ withTimezone: true }),
     createdBy: uuid().references(() => authUsers.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -136,4 +152,28 @@ export const projectDocuments = pgTable(
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index().on(t.projectId)],
+).enableRLS();
+
+/**
+ * Unfinished "List a project" forms. An organisation can have several. Server-only (no browser
+ * grant). Deleted when the project is submitted for review.
+ */
+export const projectDrafts = pgTable(
+  "project_drafts",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    orgId: uuid()
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    createdBy: uuid().references(() => authUsers.id, { onDelete: "set null" }),
+    /** Copy of the title for lists ("Untitled project" until named) */
+    title: text(),
+    /** 0-based step the person was on */
+    step: smallint().notNull().default(0),
+    /** The form values (checked with projectDraftSchema on save) */
+    data: jsonb().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index().on(t.orgId)],
 ).enableRLS();

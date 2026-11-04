@@ -16,10 +16,16 @@ import { THEME_TINT } from "../utils";
 type OpportunityCardProps = {
   opportunity: Opportunity;
   className?: string;
+  /** "List a project" preview: shows hints for empty fields and hides the buttons. */
+  preview?: boolean;
 };
 
 /** Marketplace card. Also used for "Similar opportunities" on the detail page. */
-export function OpportunityCard({ opportunity: o, className }: OpportunityCardProps) {
+export function OpportunityCard({
+  opportunity: o,
+  className,
+  preview = false,
+}: OpportunityCardProps) {
   const href = routes.opportunities.detail(o.slug);
   return (
     <article
@@ -73,7 +79,15 @@ export function OpportunityCard({ opportunity: o, className }: OpportunityCardPr
         <dl className="grid grid-cols-2 border-y border-muted py-3">
           <div className="flex flex-col gap-0.5">
             <dt className="text-xs text-subtle-foreground">Capital needed</dt>
-            <dd className="text-lg font-bold">{formatRand(o.capitalNeeded)}</dd>
+            <dd className="text-lg font-bold">
+              {o.capitalNeeded > 0 ? (
+                formatRand(o.capitalNeeded)
+              ) : preview ? (
+                <span className="font-semibold text-subtle-foreground">Not set</span>
+              ) : (
+                "—"
+              )}
+            </dd>
           </div>
           <div className="flex flex-col gap-0.5 border-l border-muted pl-4">
             <dt className="text-xs text-subtle-foreground">Stage</dt>
@@ -83,7 +97,9 @@ export function OpportunityCard({ opportunity: o, className }: OpportunityCardPr
           </div>
         </dl>
 
-        <FundingProgress raised={o.capitalRaised} target={o.capitalNeeded} />
+        {!preview || o.capitalNeeded > 0 ? (
+          <FundingProgress raised={o.capitalRaised} target={o.capitalNeeded} />
+        ) : null}
 
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-[13px] text-subtle-foreground">Looking for:</span>
@@ -92,9 +108,12 @@ export function OpportunityCard({ opportunity: o, className }: OpportunityCardPr
               {labelFor(LOOKING_FOR, need)}
             </Badge>
           ))}
+          {preview && !o.lookingFor.length ? (
+            <span className="text-[13px] text-subtle-foreground italic">pick in step 2</span>
+          ) : null}
         </div>
 
-        <div className="mt-auto flex gap-2 pt-1">
+        <div className={cn("mt-auto flex gap-2 pt-1", preview && "hidden")}>
           <Button className="flex-1" asChild>
             <Link href={href}>View opportunity</Link>
           </Button>

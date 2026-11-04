@@ -3,6 +3,8 @@ import type { DealStage } from "./constants";
 
 /** One side of a conversation (an organisation). */
 export type Party = {
+  /** Database organisations only (used to place live messages) */
+  orgId?: string;
   slug: string;
   name: string;
   initials: string;
@@ -42,6 +44,8 @@ export type Message =
       person: string;
       time: string;
       text: string;
+      /** Only for my own messages: Sending… → Sent → Seen (the other side opened the chat). */
+      status?: "sending" | "sent" | "seen";
       files?: FileRef[];
       project?: SharedProject;
     };
@@ -122,11 +126,19 @@ export type EnquiryTarget = {
     tint: string;
     meta: string;
     verified: boolean;
+    logoUrl?: string | null;
     /** Needed for enquiries from an organisation profile (which roles they can take). */
     category?: OrganisationCategory;
   };
   /** From a project page: the project is fixed and roles come from its "Looking for". */
-  project?: { title: string; slug: string; meta: string; tint: string; lookingFor: LookingFor[] };
+  project?: {
+    title: string;
+    slug: string;
+    meta: string;
+    tint: string;
+    coverUrl?: string | null;
+    lookingFor: LookingFor[];
+  };
   match?: { score: number; reasons: string[] };
   /** Already connected: show "Message" instead of "Send enquiry". */
   connectedHref?: string;

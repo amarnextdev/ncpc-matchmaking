@@ -73,7 +73,8 @@ export async function saveDraftAction(input: {
         set: { step: parsed.data.step, data: data.data, updatedAt: now },
       });
   } catch (error) {
-    const cause = error instanceof Error && error.cause instanceof Error ? error.cause.message : String(error);
+    const cause =
+      error instanceof Error && error.cause instanceof Error ? error.cause.message : String(error);
     console.error("[onboarding] could not save draft:", cause);
     return { ok: false, error: "We could not save your draft. We will try again in a moment." };
   }
@@ -228,16 +229,14 @@ export async function submitOnboardingAction(input: OnboardingValues): Promise<R
       );
     await tx.delete(organisationDocuments).where(eq(organisationDocuments.orgId, orgId));
     if (docs.length) {
-      await tx
-        .insert(organisationDocuments)
-        .values(
-          docs.map((d) => ({
-            orgId: orgId!,
-            kind: d.kind,
-            fileId: d.ref.fileId,
-            uploadedBy: user.id,
-          })),
-        );
+      await tx.insert(organisationDocuments).values(
+        docs.map((d) => ({
+          orgId: orgId!,
+          kind: d.kind,
+          fileId: d.ref.fileId,
+          uploadedBy: user.id,
+        })),
+      );
     }
     await tx.delete(onboardingDrafts).where(eq(onboardingDrafts.userId, user.id));
     await tx.insert(auditLog).values({

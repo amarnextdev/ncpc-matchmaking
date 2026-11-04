@@ -9,8 +9,8 @@ import { adminNav } from "@/config/site";
 import { routes } from "@/config/routes";
 import { cn } from "@/lib/utils";
 
-/** Navy sidebar for the NCPC admin panel. */
-export function AdminSidebar() {
+/** Navy sidebar for the NCPC admin panel. `waiting` = items to review, by link (shown as a badge). */
+export function AdminSidebar({ waiting = {} }: { waiting?: Record<string, number> }) {
   const pathname = usePathname();
   return (
     <aside className="flex w-full flex-col gap-6 bg-primary px-4 py-6 text-[#D6E0F0] lg:sticky lg:top-0 lg:h-dvh lg:w-64 lg:shrink-0">
@@ -40,7 +40,13 @@ export function AdminSidebar() {
                   )}
                 >
                   {Icon ? <Icon className="size-4" aria-hidden /> : null}
-                  {item.title}
+                  <span className="flex-1">{item.title}</span>
+                  {waiting[item.href] ? (
+                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#F5B544] px-1.5 text-[11px] font-bold text-primary tabular-nums">
+                      {waiting[item.href]}
+                      <span className="sr-only"> waiting</span>
+                    </span>
+                  ) : null}
                 </Link>
               );
             })}

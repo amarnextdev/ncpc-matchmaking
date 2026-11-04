@@ -1,15 +1,7 @@
-import type { Metadata } from "next";
-import { Inbox } from "lucide-react";
-import { ComingSoon } from "@/components/shared/coming-soon";
+import { redirect } from "next/navigation";
+import { routes } from "@/config/routes";
 
-export const metadata: Metadata = { title: "Enquiries" };
-
+/** Enquiries are invitations on the Network page now. */
 export default function Page() {
-  return (
-    <ComingSoon
-      title="Enquiries"
-      description="Enquiries you send and receive will appear here."
-      icon={Inbox}
-    />
-  );
+  redirect(routes.workspace.network);
 }

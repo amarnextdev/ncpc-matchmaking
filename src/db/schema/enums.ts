@@ -44,6 +44,9 @@ export const projectStatus = pgEnum("project_status", [
   "live",
   "closed",
   "hidden",
+  /** NCPC sent it back with a note; the owner edits and submits again */
+  "changes_requested",
+  "rejected",
 ]);
 export const needStatus = pgEnum("need_status", ["open", "found"]);
 export const docVisibility = pgEnum("doc_visibility", ["public", "members_after_enquiry"]);

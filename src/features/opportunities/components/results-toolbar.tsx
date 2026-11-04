@@ -1,5 +1,6 @@
 "use client";
 
+import { ExploreTabs } from "@/components/shared/explore-tabs";
 import { Bell, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -76,9 +77,11 @@ export function ResultsToolbar({ filters, total, facets, activeCount }: Props) {
   return (
     <div className="flex flex-col gap-3" aria-busy={params.isPending}>
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h2 className="text-lg font-bold" aria-live="polite">
-          {total} {total === 1 ? "opportunity" : "opportunities"}
-        </h2>
+        <ExploreTabs
+          active="opportunities"
+          total={total}
+          noun={total === 1 ? "opportunity" : "opportunities"}
+        />
         <div className="flex w-full items-center gap-2.5 sm:w-auto">
           <OpportunityFiltersSheet facets={facets} activeCount={activeCount} total={total} />
           <Button variant="outline" className="max-sm:hidden" type="button">

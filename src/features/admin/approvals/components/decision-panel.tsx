@@ -9,28 +9,42 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { routes } from "@/config/routes";
 import { cn } from "@/lib/utils";
+import { decideProjectAction } from "@/features/admin/projects/actions";
 import { decideOrganisationAction } from "../actions";
 
 type Decision = "approve" | "changes" | "reject";
 
-const OPTIONS: { value: Decision; label: string; help: string; icon: typeof Check }[] = [
-  {
-    value: "approve",
-    label: "Approve",
-    help: "The organisation goes live and gets the verified badge.",
-    icon: Check,
+type Kind = "organisation" | "project";
+const HELP: Record<Kind, Record<Decision, string>> = {
+  organisation: {
+    approve: "The organisation goes live and gets the verified badge.",
+    changes: "They fix the details and send them again.",
+    reject: "The organisation can't use the platform.",
   },
-  {
-    value: "changes",
-    label: "Ask for changes",
-    help: "They fix the details and send them again.",
-    icon: RotateCcw,
+  project: {
+    approve: "The project goes live in Explore and members can send enquiries.",
+    changes: "The owner fixes the project and sends it again.",
+    reject: "The project is not listed. The owner sees your reason.",
   },
-  { value: "reject", label: "Reject", help: "The organisation can't use the platform.", icon: X },
+};
+const OPTIONS: { value: Decision; label: string; icon: typeof Check }[] = [
+  { value: "approve", label: "Approve", icon: Check },
+  { value: "changes", label: "Ask for changes", icon: RotateCcw },
+  { value: "reject", label: "Reject", icon: X },
 ];
 
-/** NCPC decision for one organisation. A note is required for changes and rejections. */
-export function DecisionPanel({ orgId, orgName }: { orgId: string; orgName: string }) {
+/** NCPC decision for an organisation or a project. A note is required for changes and rejections. */
+export function DecisionPanel({
+  kind = "organisation",
+  id,
+  name,
+}: {
+  kind?: Kind;
+  id: string;
+  name: string;
+}) {
+  const who = kind === "project" ? "owner" : "organisation";
+  const back = kind === "project" ? routes.admin.projects : routes.admin.approvals;
   const router = useRouter();
   const [decision, setDecision] = React.useState<Decision>("approve");
   const [note, setNote] = React.useState("");
@@ -41,23 +55,26 @@ export function DecisionPanel({ orgId, orgName }: { orgId: string; orgName: stri
   function submit() {
     setError(null);
     if (needsNote && note.trim().length < 10) {
-      setError("Tell the organisation what to fix (at least 10 characters).");
+      setError(`Tell the ${who} what to fix (at least 10 characters).`);
       return;
     }
     startTransition(async () => {
-      const result = await decideOrganisationAction({ orgId, decision, note });
+      const result =
+        kind === "project"
+          ? await decideProjectAction({ projectId: id, decision, note })
+          : await decideOrganisationAction({ orgId: id, decision, note });
       if (!result.ok) {
         setError(result.error);
         return;
       }
       toast.success(
         decision === "approve"
-          ? `${orgName} is approved`
+          ? `${name} is approved`
           : decision === "changes"
-            ? `Changes requested from ${orgName}`
-            : `${orgName} was rejected`,
+            ? `Changes requested from ${name}`
+            : `${name} was rejected`,
       );
-      router.push(routes.admin.approvals);
+      router.push(back);
       router.refresh();
     });
   }
@@ -99,7 +116,7 @@ export function DecisionPanel({ orgId, orgName }: { orgId: string; orgName: stri
               </span>
               <span className="flex flex-col gap-0.5">
                 <span className="text-sm font-semibold">{o.label}</span>
-                <span className="text-xs text-muted-foreground">{o.help}</span>
+                <span className="text-xs text-muted-foreground">{HELP[kind][o.value]}</span>
               </span>
             </button>
           );
@@ -108,7 +125,7 @@ export function DecisionPanel({ orgId, orgName }: { orgId: string; orgName: stri
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="decision-note">
-          {needsNote ? "Message to the organisation" : "Note (optional, only NCPC sees it)"}
+          {needsNote ? `Message to the ${who}` : "Note (optional, only NCPC sees it)"}
         </Label>
         <Textarea
           id="decision-note"
@@ -118,9 +135,13 @@ export function DecisionPanel({ orgId, orgName }: { orgId: string; orgName: stri
           onChange={(e) => setNote(e.target.value)}
           placeholder={
             decision === "changes"
-              ? "e.g. The B-BBEE certificate has expired. Please upload a valid one."
+              ? kind === "project"
+                ? "e.g. Please add a feasibility study and photos of the site."
+                : "e.g. The B-BBEE certificate has expired. Please upload a valid one."
               : decision === "reject"
-                ? "e.g. We could not match the registration number with CIPC records."
+                ? kind === "project"
+                  ? "e.g. This project is outside the sustainable industry themes NCPC lists."
+                  : "e.g. We could not match the registration number with CIPC records."
                 : ""
           }
           aria-invalid={Boolean(error) || undefined}
@@ -143,10 +164,10 @@ export function DecisionPanel({ orgId, orgName }: { orgId: string; orgName: stri
       >
         {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
         {decision === "approve"
-          ? "Approve organisation"
+          ? `Approve ${kind}`
           : decision === "changes"
             ? "Send request for changes"
-            : "Reject organisation"}
+            : `Reject ${kind}`}
       </Button>
     </section>
   );
