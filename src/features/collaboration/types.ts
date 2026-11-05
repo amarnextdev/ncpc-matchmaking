@@ -64,6 +64,32 @@ export type Meeting = {
   status: "proposed" | "confirmed" | "done";
 };
 
+/** Database state of a deal (real organisations only). */
+export type DealLive = {
+  enquiryId: string;
+  /** null until someone presses "Start deal" */
+  dealId: string | null;
+  projectId: string | null;
+  isOwner: boolean;
+  myNote: string;
+  request: {
+    id: string;
+    status: "requested" | "submitted" | "changes_requested" | "accepted" | "withdrawn";
+    ownerNote: string | null;
+    version: number;
+    form: Record<string, string | string[]> | null;
+    submittedAt: string | null;
+  } | null;
+  partnership: {
+    id: string;
+    status: "awaiting_confirmation" | "active" | "ended";
+    amount: number | null;
+    amountPublic: boolean;
+    ownerConfirmedAt: string | null;
+    partnerConfirmedAt: string | null;
+  } | null;
+};
+
 /** One project discussed inside a conversation. */
 export type Deal = {
   id: string;
@@ -79,6 +105,8 @@ export type Deal = {
   termsNote: string;
   /** Private notes per organisation slug. */
   notes: Record<string, string>;
+  /** Set for database deals: the collaboration flow runs on this. */
+  live?: DealLive;
 };
 
 /** One chat between two organisations (they are connected). */

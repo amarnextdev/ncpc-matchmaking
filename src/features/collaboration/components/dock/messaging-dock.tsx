@@ -19,6 +19,8 @@ import { isDbId } from "../../use-live-messages";
 import type { ConversationView, Deal, DealDocument, EnquiryRequest, Message } from "../../types";
 import { dealStageLabel } from "../../views";
 import { DealPanel } from "../messages/deal-panel";
+import { LiveDealPanel } from "../messages/live-deal-panel";
+import { startDealAction } from "../../deal-actions";
 import { MessageItem } from "../messages/message-item";
 import { OrgAvatar } from "../org-avatar";
 
@@ -222,6 +224,18 @@ export function MessagingDock({
 
   function startDeal(c: ConversationView, dealId: string) {
     const d = c.deals.find((x) => x.id === dealId);
+    // Real deals start on the server (the "Deal started" event then comes from the database).
+    if (d?.live) {
+      setDealFor((s) => ({ ...s, [c.id]: dealId }));
+      void startDealAction(d.live.enquiryId).then((r) => {
+        if (!r.ok) toast.error(r.error);
+        else {
+          toast.success("Deal started");
+          router.refresh();
+        }
+      });
+      return;
+    }
     setStarted((s) => ({ ...s, [dealId]: true }));
     setDealFor((s) => ({ ...s, [c.id]: dealId }));
     setSent((s) => ({
@@ -293,17 +307,26 @@ export function MessagingDock({
               </div>
               {dealMin ? null : (
                 <div className="min-h-0 flex-1">
-                  <DealPanel
-                    conversation={c}
-                    deal={deal}
-                    onDealChange={(dealId) => setDealFor((x) => ({ ...x, [id]: dealId }))}
-                    isStarted={isStarted}
-                    onStartDeal={(dealId) => startDeal(c, dealId)}
-                    docStatus={(d, doc) => docs[`${d.id}:${doc.name}`] ?? doc.status}
-                    onDocStatus={(d, doc, status) =>
-                      setDocs((x) => ({ ...x, [`${d.id}:${doc.name}`]: status }))
-                    }
-                  />
+                  {deal.live ? (
+                    <LiveDealPanel
+                      conversation={c}
+                      deal={deal as typeof deal & { live: NonNullable<typeof deal.live> }}
+                      deals={c.deals}
+                      onDealChange={(dealId) => setDealFor((x) => ({ ...x, [id]: dealId }))}
+                    />
+                  ) : (
+                    <DealPanel
+                      conversation={c}
+                      deal={deal}
+                      onDealChange={(dealId) => setDealFor((x) => ({ ...x, [id]: dealId }))}
+                      isStarted={isStarted}
+                      onStartDeal={(dealId) => startDeal(c, dealId)}
+                      docStatus={(d, doc) => docs[`${d.id}:${doc.name}`] ?? doc.status}
+                      onDocStatus={(d, doc, status) =>
+                        setDocs((x) => ({ ...x, [`${d.id}:${doc.name}`]: status }))
+                      }
+                    />
+                  )}
                 </div>
               )}
             </section>
@@ -441,7 +464,9 @@ export function MessagingDock({
                       onClick={() => openDeal(id)}
                       className="text-xs font-semibold text-primary hover:underline"
                     >
-                      Documents, meetings and terms ›
+                      {c.deals.some((d) => d.live)
+                        ? "Deal and collaboration ›"
+                        : "Documents, meetings and terms ›"}
                     </button>
                     <Button type="submit" size="sm" disabled={!(drafts[id] ?? "").trim()}>
                       Send

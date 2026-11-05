@@ -73,7 +73,7 @@ export function NotificationBell({ userId, initial }: { userId: string; initial:
               description: r.body ?? undefined,
               action: r.link ? { label: "Open", onClick: () => router.push(r.link!) } : undefined,
             });
-            if (r.kind.startsWith("enquiry_")) router.refresh();
+            if (/^(enquiry_|deal_|collab_|partnership_)/.test(r.kind)) router.refresh();
           },
         )
         .subscribe();

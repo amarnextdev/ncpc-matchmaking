@@ -5,12 +5,13 @@ import { db } from "@/db";
 import {
   files,
   organisations,
+  partnerships,
   projectDocuments,
   projectMedia,
   projectNeeds,
   projects,
 } from "@/db/schema";
-import { ORGANISATION_CATEGORIES, PROVINCES, THEMES, labelFor } from "@/lib/constants";
+import { LOOKING_FOR, ORGANISATION_CATEGORIES, PROVINCES, THEMES, labelFor } from "@/lib/constants";
 import { privateFileUrl } from "@/lib/storage/server";
 import { publicImageUrl } from "@/lib/storage/url";
 import { formatRand } from "@/lib/utils";
@@ -100,7 +101,7 @@ export async function getLiveOpportunityDetail(slug: string): Promise<Opportunit
     if (!row) return null;
     const { p, org } = row;
 
-    const [needs, media, docs, ownerProjects] = await Promise.all([
+    const [needs, media, docs, ownerProjects, partnerRows] = await Promise.all([
       db.select().from(projectNeeds).where(eq(projectNeeds.projectId, p.id)),
       db
         .select({ path: files.path })
@@ -119,6 +120,12 @@ export async function getLiveOpportunityDetail(slug: string): Promise<Opportunit
         .innerJoin(files, eq(files.id, projectDocuments.fileId))
         .where(eq(projectDocuments.projectId, p.id)),
       getLiveOpportunities().then((all) => all.filter((o) => o.owner.slug === org.slug).length),
+      db
+        .select({ p: partnerships, org: organisations, logo: files.path })
+        .from(partnerships)
+        .innerJoin(organisations, eq(organisations.id, partnerships.partnerOrgId))
+        .leftJoin(files, eq(files.id, organisations.logoFileId))
+        .where(and(eq(partnerships.projectId, p.id), eq(partnerships.status, "active"))),
     ]);
 
     const location = [p.city, labelFor(PROVINCES, p.province)].filter(Boolean).join(", ");
@@ -183,7 +190,15 @@ export async function getLiveOpportunityDetail(slug: string): Promise<Opportunit
       stageMetric: null,
       stageNote: null,
       updates: [],
-      partners: [],
+      partners: partnerRows.map(({ p: x, org: o, logo }) => ({
+        name: o.name,
+        slug: o.slug,
+        logoUrl: logo ? publicImageUrl(logo) : null,
+        role: labelFor(LOOKING_FOR, x.role),
+        detail: x.amount && x.amountPublic ? formatRand(x.amount) : labelFor(LOOKING_FOR, x.role),
+        verified: o.status === "approved",
+        backer: x.role === "investor" || x.role === "funder",
+      })),
       documents: {
         public: publicDocs,
         locked: docs.filter((d) => d.visibility !== "public").map((d) => d.name),

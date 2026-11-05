@@ -4,18 +4,22 @@ import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { authUsers } from "drizzle-orm/supabase";
 import { db } from "@/db";
 import {
+  collaborationRequests,
   conversationReads,
   conversations,
+  dealNotes,
+  deals as dealsTable,
   enquiries,
   messages,
   organisationMembers,
   organisations,
+  partnerships,
   profiles,
   projects,
 } from "@/db/schema";
 import { PROVINCES, labelFor } from "@/lib/constants";
 import { initials } from "@/lib/utils";
-import type { Conversation, Deal, Message, Party } from "./types";
+import type { Conversation, Deal, DealLive, Message, Party } from "./types";
 
 const timeFmt = new Intl.DateTimeFormat("en-ZA", {
   hour: "2-digit",
@@ -145,6 +149,27 @@ export const getDbConversations = cache(
           .where(inArray(conversationReads.conversationId, ids)),
       ]);
       const parties = await partiesFor([me, ...others]);
+
+      // Collaboration state per deal.
+      const dealRows = await db
+        .select()
+        .from(dealsTable)
+        .where(inArray(dealsTable.conversationId, ids));
+      const dealIds = dealRows.map((d) => d.id);
+      const [reqRows, partRows, noteRows] = dealIds.length
+        ? await Promise.all([
+            db
+              .select()
+              .from(collaborationRequests)
+              .where(inArray(collaborationRequests.dealId, dealIds))
+              .orderBy(desc(collaborationRequests.createdAt)),
+            db.select().from(partnerships).where(inArray(partnerships.dealId, dealIds)),
+            db
+              .select()
+              .from(dealNotes)
+              .where(and(inArray(dealNotes.dealId, dealIds), eq(dealNotes.orgId, me.id))),
+          ])
+        : [[], [], []];
       const mine = parties.get(me.id)!;
 
       return convs.flatMap((c): Conversation[] => {
@@ -196,6 +221,42 @@ export const getDbConversations = cache(
             },
           });
         }
+        for (const d of dealRows.filter((x) => x.conversationId === c.id)) {
+          const title =
+            opened.find((o) => o.e.projectId === d.projectId)?.projectTitle ?? "the project";
+          const ev = (
+            id: string,
+            at: Date | null | undefined,
+            text: string,
+            tone: "green" | "blue" = "blue",
+          ) => {
+            if (at)
+              items.push({
+                at,
+                msg: { id, kind: "event", icon: "check", tone, title: text, text: "" },
+              });
+          };
+          ev(`ds-${d.id}`, d.createdAt, `Deal started on ${title}.`);
+          for (const r of reqRows.filter((x) => x.dealId === d.id)) {
+            ev(`rq-${r.id}`, r.createdAt, "Collaboration request sent.");
+            if (r.submittedAt)
+              ev(
+                `rs-${r.id}`,
+                r.submittedAt,
+                `Offer sent${r.version > 1 ? ` (version ${r.version})` : ""}.`,
+              );
+            if (r.reviewedAt)
+              ev(
+                `rr-${r.id}`,
+                r.reviewedAt,
+                r.status === "accepted" ? "Offer accepted." : "Changes requested.",
+                r.status === "accepted" ? "green" : "blue",
+              );
+          }
+          const part = partRows.find((x) => x.dealId === d.id);
+          if (part?.activatedAt)
+            ev(`pa-${part.id}`, part.activatedAt, "Partnership is live.", "green");
+        }
         items.sort((a, b) => a.at.getTime() - b.at.getTime());
         const msgView: Message[] = [];
         let lastDay = "";
@@ -215,22 +276,62 @@ export const getDbConversations = cache(
               (e.fromOrgId === me.id && e.toOrgId === otherId) ||
               (e.toOrgId === me.id && e.fromOrgId === otherId),
           )
-          .map(({ e, projectTitle, projectSlug }) => {
-            const ownerSlug = e.toOrgId === me.id ? mine.slug : them.slug;
-            const partnerSlug = e.toOrgId === me.id ? them.slug : mine.slug;
+          .map(({ e, projectTitle, projectSlug }): Deal => {
+            const row = e.projectId
+              ? dealRows.find((d) => d.conversationId === c.id && d.projectId === e.projectId)
+              : undefined;
+            // Owner = the organisation whose project it is (falls back to the enquiry's target).
+            const ownerIsMe = row ? row.ownerOrgId === me.id : e.toOrgId === me.id;
+            const ownerSlug = ownerIsMe ? mine.slug : them.slug;
+            const partnerSlug = ownerIsMe ? them.slug : mine.slug;
+            const req = row ? reqRows.find((r) => r.dealId === row.id) : undefined;
+            const part = row ? partRows.find((x) => x.dealId === row.id) : undefined;
+            const live: DealLive = {
+              enquiryId: e.id,
+              dealId: row?.id ?? null,
+              projectId: e.projectId,
+              isOwner: ownerIsMe,
+              myNote: row ? (noteRows.find((n) => n.dealId === row.id)?.body ?? "") : "",
+              request: req
+                ? {
+                    id: req.id,
+                    status: req.status,
+                    ownerNote: req.ownerNote,
+                    version: req.version,
+                    form: (req.form as Record<string, string | string[]> | null) ?? null,
+                    submittedAt: req.submittedAt?.toISOString() ?? null,
+                  }
+                : null,
+              partnership: part
+                ? {
+                    id: part.id,
+                    status: part.status,
+                    amount: part.amount,
+                    amountPublic: part.amountPublic,
+                    ownerConfirmedAt: part.ownerConfirmedAt?.toISOString() ?? null,
+                    partnerConfirmedAt: part.partnerConfirmedAt?.toISOString() ?? null,
+                  }
+                : null,
+            };
+            const stage: Deal["stage"] = !row
+              ? "not_started"
+              : row.stage === "active_partner" || row.stage === "closed"
+                ? "active"
+                : row.stage;
             return {
-              id: e.id,
+              id: row?.id ?? `enq-${e.id}`,
               projectTitle: projectTitle ?? "General enquiry",
               projectSlug: projectSlug ?? null,
               ownerSlug,
               partnerSlug,
               role: e.role,
-              stage: "not_started",
+              stage,
               documents: [],
               meetings: [],
               terms: [],
               termsNote: "",
               notes: {},
+              live,
             };
           });
         if (!deals.length) {
