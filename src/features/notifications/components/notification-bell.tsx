@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { openDockFromLink } from "@/features/collaboration/dock-events";
 import { useRouter } from "next/navigation";
 import { Bell, CheckCheck, Inbox } from "lucide-react";
 import { toast } from "sonner";
@@ -71,7 +72,14 @@ export function NotificationBell({ userId, initial }: { userId: string; initial:
             setUnread((n) => n + 1);
             toast(r.title, {
               description: r.body ?? undefined,
-              action: r.link ? { label: "Open", onClick: () => router.push(r.link!) } : undefined,
+              action: r.link
+                ? {
+                    label: "Open",
+                    onClick: () => {
+                      if (!openDockFromLink(r.link!)) router.push(r.link!);
+                    },
+                  }
+                : undefined,
             });
             if (/^(enquiry_|deal_|collab_|partnership_)/.test(r.kind)) router.refresh();
           },
@@ -166,7 +174,10 @@ export function NotificationBell({ userId, initial }: { userId: string; initial:
                   {n.link ? (
                     <Link
                       href={n.link}
-                      onClick={() => openItem(n)}
+                      onClick={(e) => {
+                        openItem(n);
+                        if (openDockFromLink(n.link!)) e.preventDefault();
+                      }}
                       className="block transition-colors hover:bg-muted/60"
                     >
                       {inner}

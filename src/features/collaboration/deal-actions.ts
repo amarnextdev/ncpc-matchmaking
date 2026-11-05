@@ -175,7 +175,7 @@ export async function setDealStageAction(input: {
     await notifyOrg(tx, d.partnerOrgId, {
       kind: "deal_stage",
       title: `${ctx.org.name} moved your deal to ${parsed.data.stage.replace("_", " ")}`,
-      link: routes.workspace.chat(d.conversationId),
+      link: routes.workspace.dealChat(d.conversationId),
     });
   });
   done();
@@ -245,7 +245,7 @@ export async function sendCollabRequestAction(input: {
         body: parsed.data.message
           ? `“${parsed.data.message}”`
           : `Fill in your offer as ${labelFor(LOOKING_FOR, d.role).toLowerCase()}.`,
-        link: routes.workspace.chat(d.conversationId),
+        link: routes.workspace.dealChat(d.conversationId),
       });
     });
   } catch (error) {
@@ -302,7 +302,7 @@ export async function submitOfferAction(input: {
       kind: "collab_submitted",
       title: `${ctx.org.name} sent their offer${version > 1 ? ` (version ${version})` : ""}`,
       body: "Review it and accept or ask for changes.",
-      link: routes.workspace.chat(d.conversationId),
+      link: routes.workspace.dealChat(d.conversationId),
     });
   });
   done();
@@ -352,7 +352,7 @@ export async function reviewOfferAction(input: {
         kind: "collab_changes",
         title: `${ctx.org.name} asked for changes to your offer`,
         body: `“${parsed.data.note}”`,
-        link: routes.workspace.chat(d.conversationId),
+        link: routes.workspace.dealChat(d.conversationId),
       });
       return;
     }
@@ -377,7 +377,7 @@ export async function reviewOfferAction(input: {
       kind: "collab_accepted",
       title: `${ctx.org.name} accepted your offer`,
       body: "Sign your agreement, then confirm the partnership.",
-      link: routes.workspace.chat(d.conversationId),
+      link: routes.workspace.dealChat(d.conversationId),
     });
   });
   done();
@@ -421,7 +421,7 @@ export async function confirmPartnershipAction(input: {
         kind: "partnership_confirm",
         title: `${ctx.org.name} confirmed the partnership`,
         body: "Confirm on your side to make it live.",
-        link: d ? routes.workspace.chat(d.conversationId) : routes.workspace.network,
+        link: d ? routes.workspace.dealChat(d.conversationId) : routes.workspace.network,
       });
       return false;
     }
@@ -469,7 +469,7 @@ export async function confirmPartnershipAction(input: {
         kind: "partnership_active",
         title: `Partnership is live: “${proj?.title ?? "your project"}”`,
         body: "It now shows on the project page and both profiles.",
-        link: d ? routes.workspace.chat(d.conversationId) : routes.workspace.network,
+        link: d ? routes.workspace.dealChat(d.conversationId) : routes.workspace.network,
       });
     }
     return true;

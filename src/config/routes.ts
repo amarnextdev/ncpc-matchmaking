@@ -60,6 +60,9 @@ export const routes = {
     network: "/workspace/network",
     /** Opens a chat in the messaging dock (on any page that has the dock) */
     chat: (conversationId: string) => `/workspace/network?tab=connections&chat=${conversationId}`,
+    /** Opens a chat with its Deal panel */
+    dealChat: (conversationId: string) =>
+      `/workspace/network?tab=connections&chat=${conversationId}&deal=1`,
     messages: "/workspace/messages",
     projects: "/workspace/projects",
     newProject: "/workspace/projects/new",

@@ -3,7 +3,16 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowUpRight, Check, Clock3, Loader2, Lock, PartyPopper, RotateCcw } from "lucide-react";
+import {
+  ArrowUpRight,
+  Check,
+  Mail,
+  Clock3,
+  Loader2,
+  Lock,
+  PartyPopper,
+  RotateCcw,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -39,9 +48,9 @@ function Section({
   aside?: React.ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-2.5">
+    <section className="flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-[0_1px_2px_rgb(15_23_42/0.04)]">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-xs font-bold tracking-[0.06em] text-muted-foreground uppercase">
+        <h3 className="text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">
           {title}
         </h3>
         {aside}
@@ -133,7 +142,7 @@ export function LiveDealPanel({
   // ── Not started ──
   if (!live.dealId) {
     return (
-      <div className="flex h-full flex-col gap-5 overflow-y-auto p-[18px]">
+      <div className="flex h-full [scrollbar-width:thin] flex-col gap-3 overflow-y-auto bg-surface-subtle p-4">
         <DealHeader
           deal={deal}
           deals={deals}
@@ -172,7 +181,7 @@ export function LiveDealPanel({
   }
 
   return (
-    <div className="flex h-full flex-col gap-5 overflow-y-auto p-[18px]">
+    <div className="flex h-full [scrollbar-width:thin] flex-col gap-3 overflow-y-auto bg-surface-subtle p-4">
       <DealHeader
         deal={deal}
         deals={deals}
@@ -230,19 +239,39 @@ export function LiveDealPanel({
       {/* What to do next */}
       <Section title="Next step">
         {part?.status === "active" ? (
-          <div className="flex gap-3 rounded-xl bg-success-soft p-3.5 text-success">
-            <PartyPopper className="mt-0.5 size-5 shrink-0" aria-hidden />
-            <div className="text-[13px] leading-5">
-              <p className="font-bold">Partnership is live</p>
-              <p className="text-success/90">
-                {partner.name} is a {labelFor(LOOKING_FOR, deal.role).toLowerCase()}
-                {part.amount ? ` · ${formatRand(part.amount)}` : ""}. It shows on the project page
-                and both profiles.
-              </p>
+          <div className="flex flex-col gap-3 rounded-xl border border-success/20 bg-success-soft p-4">
+            <div className="flex items-center gap-2.5 text-success">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-success text-white">
+                <PartyPopper className="size-[18px]" aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[15px] font-bold">Partnership is live</p>
+                <p className="text-xs text-success/85">
+                  Shown on the project page and both profiles
+                </p>
+              </div>
             </div>
+            <dl className="grid grid-cols-3 divide-x divide-success/15 rounded-lg bg-card/80 text-center">
+              <div className="px-2 py-2.5">
+                <dt className="text-[11px] text-muted-foreground">Partner</dt>
+                <dd className="truncate text-[13px] font-bold">
+                  {partner.name.replace(/\s*\(Pty\)\s*Ltd\.?$/i, "")}
+                </dd>
+              </div>
+              <div className="px-2 py-2.5">
+                <dt className="text-[11px] text-muted-foreground">Role</dt>
+                <dd className="text-[13px] font-bold">{labelFor(LOOKING_FOR, deal.role)}</dd>
+              </div>
+              <div className="px-2 py-2.5">
+                <dt className="text-[11px] text-muted-foreground">Amount</dt>
+                <dd className="text-[13px] font-bold tabular-nums">
+                  {part.amount ? formatRand(part.amount) : "—"}
+                </dd>
+              </div>
+            </dl>
           </div>
         ) : part ? (
-          <div className="flex flex-col gap-3 rounded-xl border p-3.5">
+          <div className="flex flex-col gap-3">
             <div>
               <p className="text-sm font-bold">Confirm your partnership</p>
               <p className="mt-0.5 text-xs leading-[18px] text-muted-foreground">
@@ -307,7 +336,7 @@ export function LiveDealPanel({
           (req.status === "submitted" ||
             (req.status === "changes_requested" && !live.isOwner) ||
             req.status === "requested") ? (
-          <div className="flex flex-col gap-3 rounded-xl border p-3.5">
+          <div className="flex flex-col gap-3">
             {req.status === "requested" || req.status === "changes_requested" ? (
               live.isOwner ? (
                 <p className="flex items-center gap-2 text-[13px] text-foreground/80">
@@ -446,11 +475,11 @@ export function LiveDealPanel({
         }
       >
         <Textarea
-          rows={3}
+          rows={4}
           value={note}
           onChange={(e) => onNote(e.target.value)}
           placeholder="Anything you want to remember about this deal."
-          className="resize-none text-[13px]"
+          className="resize-none bg-surface-subtle text-[13px] focus-visible:bg-background"
         />
         <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <Lock className="size-3" aria-hidden /> Only {c.me.name} sees this
@@ -503,7 +532,7 @@ function DealHeader({
 }) {
   const role = labelFor(LOOKING_FOR, deal.role).toLowerCase();
   return (
-    <div className="flex flex-col gap-2.5 rounded-xl border bg-surface-subtle p-3.5">
+    <div className="flex flex-col gap-3 rounded-xl border border-l-4 border-l-primary bg-card p-4 shadow-[0_1px_2px_rgb(15_23_42/0.04)]">
       {deals.length > 1 ? (
         <select
           value={deal.id}
@@ -593,22 +622,41 @@ function Progress({ steps }: { steps: { label: string; who: string; done: boolea
 }
 
 function Contact({ c }: { c: ConversationView }) {
-  if (!c.them.contact.name && !c.them.contact.email) return null;
+  const k = c.them.contact;
+  if (!k.name && !k.email) return null;
+  const initials = (k.name ?? c.them.name)
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
   return (
-    <section className="flex flex-col gap-1 border-t pt-4 text-[13px] text-foreground/80">
-      <h3 className="mb-1 text-xs font-bold tracking-[0.06em] text-muted-foreground uppercase">
-        Contact
+    <section className="flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-[0_1px_2px_rgb(15_23_42/0.04)]">
+      <h3 className="text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">
+        Contact at {c.them.name}
       </h3>
-      <span>
-        <strong className="text-foreground">{c.them.contact.name}</strong>
-        {c.them.contact.role ? ` · ${c.them.contact.role}` : ""}
-      </span>
-      {c.them.contact.email ? (
-        <a href={`mailto:${c.them.contact.email}`} className="text-primary hover:underline">
-          {c.them.contact.email}
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden
+          className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-[13px] font-bold text-primary"
+        >
+          {initials}
+        </span>
+        <div className="flex min-w-0 flex-col text-[13px]">
+          <span className="truncate font-semibold">
+            {k.name}
+            {k.role ? <span className="font-normal text-muted-foreground"> · {k.role}</span> : null}
+          </span>
+          {k.phone ? <span className="text-muted-foreground">{k.phone}</span> : null}
+        </div>
+      </div>
+      {k.email ? (
+        <a
+          href={`mailto:${k.email}`}
+          className="flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-[13px] font-semibold text-primary transition-colors hover:bg-primary-soft/50"
+        >
+          <Mail className="size-4" aria-hidden /> {k.email}
         </a>
       ) : null}
-      {c.them.contact.phone ? <span>{c.them.contact.phone}</span> : null}
     </section>
   );
 }

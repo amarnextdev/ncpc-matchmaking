@@ -20,7 +20,7 @@ export type OfferField =
       key: string;
       label: string;
       kind: "choice";
-      options: { value: string; label: string }[];
+      options: { value: string; label: string; hint?: string }[];
       required?: boolean;
     }
   | { key: string; label: string; kind: "multi"; options: { value: string; label: string }[] };
@@ -45,10 +45,10 @@ export const OFFER_FIELDS: Record<LookingFor, OfferField[]> = {
       kind: "choice",
       required: true,
       options: [
-        { value: "equity", label: "Equity" },
-        { value: "debt", label: "Debt" },
-        { value: "mezzanine", label: "Mezzanine" },
-        { value: "convertible", label: "Convertible" },
+        { value: "equity", label: "Equity", hint: "A stake in the project" },
+        { value: "debt", label: "Debt", hint: "A loan, repaid with interest" },
+        { value: "mezzanine", label: "Mezzanine", hint: "Between debt and equity" },
+        { value: "convertible", label: "Convertible", hint: "A loan that can become equity" },
       ],
     },
     {
@@ -69,10 +69,10 @@ export const OFFER_FIELDS: Record<LookingFor, OfferField[]> = {
       kind: "choice",
       required: true,
       options: [
-        { value: "grant", label: "Grant" },
-        { value: "loan", label: "Loan" },
-        { value: "guarantee", label: "Guarantee" },
-        { value: "blended", label: "Blended" },
+        { value: "grant", label: "Grant", hint: "Not repaid" },
+        { value: "loan", label: "Loan", hint: "Repaid over a term" },
+        { value: "guarantee", label: "Guarantee", hint: "Backs another lender" },
+        { value: "blended", label: "Blended", hint: "A mix of the above" },
       ],
     },
     {
@@ -166,10 +166,13 @@ export function offerSchema(role: LookingFor) {
         .default([]);
       continue;
     }
+    const required = "required" in f && f.required;
+    const missing =
+      f.kind === "choice" ? `Choose ${f.label.toLowerCase()}` : `Enter ${f.label.toLowerCase()}`;
     let s = z
-      .string()
+      .string({ required_error: missing, invalid_type_error: missing })
       .trim()
-      .max(f.kind === "textarea" ? 2000 : 200);
+      .max(f.kind === "textarea" ? 2000 : 200, `${f.label}: keep it shorter`);
     if (f.kind === "money")
       s = s.refine((v) => v === "" || money.test(v), `${f.label}: enter a whole number`) as never;
     if (f.kind === "month")
@@ -182,10 +185,7 @@ export function offerSchema(role: LookingFor) {
         (v) => v === "" || f.options.some((o) => o.value === v),
         `${f.label}: choose an option`,
       ) as never;
-    shape[f.key] =
-      "required" in f && f.required
-        ? s.refine((v) => v !== "", `${f.label} is required`)
-        : s.default("");
+    shape[f.key] = required ? s.refine((v) => v !== "", missing) : s.default("");
   }
   return z.object(shape).strip();
 }

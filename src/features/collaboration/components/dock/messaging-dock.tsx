@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronDown, ChevronUp, Maximize2, Minimize2, Search, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Handshake, Maximize2, Minimize2, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { VerifiedBadge } from "@/components/shared/verified-badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import { dealStageLabel } from "../../views";
 import { DealPanel } from "../messages/deal-panel";
 import { LiveDealPanel } from "../messages/live-deal-panel";
 import { startDealAction } from "../../deal-actions";
+import { dealTodo } from "../../deal-todo";
 import { MessageItem } from "../messages/message-item";
 import { OrgAvatar } from "../org-avatar";
 
@@ -83,15 +84,20 @@ export function MessagingDock({
         setMinimised((m) => ({ ...m, [id]: false }));
       }
     };
-    const onEvent = (e: Event) =>
-      openChat((e as CustomEvent<{ chat: string | null }>).detail?.chat ?? null);
+    const onEvent = (e: Event) => {
+      const d = (e as CustomEvent<{ chat: string | null; deal?: boolean }>).detail;
+      if (d?.chat && d.deal) openDeal(d.chat);
+      else openChat(d?.chat ?? null);
+    };
     window.addEventListener(DOCK_EVENT, onEvent);
     const params = new URLSearchParams(window.location.search);
     const chat = params.get("chat");
     if (chat || params.get("dock")) {
-      openChat(chat);
+      if (chat && params.get("deal")) openDeal(chat);
+      else openChat(chat);
       params.delete("chat");
       params.delete("dock");
+      params.delete("deal");
       const q = params.toString();
       window.history.replaceState(null, "", `${window.location.pathname}${q ? `?${q}` : ""}`);
     }
@@ -270,22 +276,30 @@ export function MessagingDock({
               key={`deal-${id}`}
               aria-label={`Deal with ${c.them.name}`}
               className={cn(
-                "flex w-[380px] flex-col overflow-hidden rounded-t-[14px] border border-b-0 bg-card shadow-[0_-8px_32px_rgb(15_23_42/0.14)]",
-                dealMin ? "h-14" : "h-[580px]",
+                "flex w-[460px] flex-col overflow-hidden rounded-t-[14px] border border-b-0 bg-card shadow-[0_-8px_32px_rgb(15_23_42/0.14)]",
+                dealMin ? "h-16" : "h-[min(720px,calc(100dvh-72px))]",
                 // Phones: full screen, above the chat
                 "max-lg:fixed max-lg:inset-0 max-lg:z-50 max-lg:h-dvh max-lg:w-full max-lg:rounded-none max-lg:border-0",
               )}
             >
-              <div className="flex h-14 shrink-0 items-center gap-1 border-b pr-2 pl-3">
+              <div className="flex h-16 shrink-0 items-center gap-1 border-b pr-2 pl-3.5">
                 <button
                   type="button"
                   onClick={() => setDealMin((v) => !v)}
                   aria-expanded={!dealMin}
-                  className="flex min-w-0 flex-1 flex-col text-left"
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
                 >
-                  <span className="truncate text-sm font-bold">Deal · {deal.projectTitle}</span>
-                  <span className="truncate text-xs text-subtle-foreground">
-                    with {c.them.name}
+                  <span
+                    aria-hidden
+                    className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-white"
+                  >
+                    <Handshake className="size-[18px]" />
+                  </span>
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate text-[15px] font-bold">{deal.projectTitle}</span>
+                    <span className="truncate text-xs text-subtle-foreground">
+                      Deal with {c.them.name}
+                    </span>
                   </span>
                 </button>
                 <Button
@@ -423,6 +437,30 @@ export function MessagingDock({
                     <span className="ml-auto shrink-0 font-semibold text-primary">Open deal ›</span>
                   </button>
                 ) : null}
+                {(() => {
+                  const todo = dealTodo(deal?.live, c.them.name);
+                  if (!todo || dealOf === id) return null;
+                  return (
+                    <div
+                      role="status"
+                      className="flex shrink-0 items-center gap-3 border-b bg-primary px-3.5 py-2.5 text-white"
+                    >
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate text-[13px] font-bold">{todo.title}</span>
+                        <span className="line-clamp-2 text-[11px] leading-4 text-[#D6E0F0]">
+                          {todo.text}
+                        </span>
+                      </span>
+                      <Button
+                        size="sm"
+                        className="shrink-0 bg-white font-bold text-primary hover:bg-white/90"
+                        onClick={() => openDeal(id)}
+                      >
+                        {todo.cta}
+                      </Button>
+                    </div>
+                  );
+                })()}
                 <DockMessages
                   conversation={c}
                   messages={messages}
