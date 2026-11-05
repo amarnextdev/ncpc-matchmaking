@@ -60,7 +60,11 @@ function mobileGroups(
 ): MobileNavGroup[] {
   const explore: MobileNavGroup = {
     title: "Explore",
-    items: [...exploreNav, { title: "How it works", href: routes.about }],
+    items: [
+      ...exploreNav,
+      { title: "About", href: routes.about },
+      { title: "Contact NCPC", href: routes.contact },
+    ],
   };
   const role = roleOf(viewer);
 

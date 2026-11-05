@@ -70,7 +70,8 @@ export function HeaderActions({
           icon={UsersRound}
           count={requests}
         />
-        <MessagesButton count={unread} />
+        {/* Desktop has the messaging dock at the bottom; phones open it from here. */}
+        <MessagesButton count={unread} className="lg:hidden" />
         {bell ? (
           <NotificationBell userId={bell.userId} initial={bell.data} />
         ) : (

@@ -198,7 +198,35 @@ export async function requestPasswordResetAction(email: string): Promise<ActionR
   return { ok: true };
 }
 
-/** Reset password: the reset link already signed the person in (see /auth/callback). */
+/**
+ * Forgot password, step 2: the 6-digit code from the reset email.
+ * A right code signs the person in for this one purpose; they then choose a new password.
+ */
+export async function verifyResetCodeAction(email: string, token: string): Promise<ActionResult> {
+  if (!isSupabaseConfigured) return NOT_READY;
+  const parsed = otpSchema.safeParse({ email, token });
+  if (!parsed.success) {
+    return { ok: false, error: `Enter the ${OTP_LENGTH}-digit code from the email.` };
+  }
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.verifyOtp({
+    email: parsed.data.email,
+    token: parsed.data.token,
+    type: "recovery",
+  });
+  if (error || !data.user) {
+    if (error?.status === 429) {
+      return { ok: false, error: "Too many attempts. Please wait a few minutes and try again." };
+    }
+    return {
+      ok: false,
+      error: "This code has expired or is not right. Check the email, or send a new code.",
+    };
+  }
+  redirect(routes.auth.resetPassword);
+}
+
+/** Reset password: the code (or the reset link) already signed the person in. */
 export async function updatePasswordAction(password: string): Promise<ActionResult> {
   if (!isSupabaseConfigured) return NOT_READY;
   if (!newPassword.safeParse(password).success) {
@@ -211,7 +239,7 @@ export async function updatePasswordAction(password: string): Promise<ActionResu
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) {
-    return { ok: false, error: "This reset link has expired. Ask for a new one." };
+    return { ok: false, error: "Your reset session has expired. Ask for a new code." };
   }
   const { error } = await supabase.auth.updateUser({ password });
   if (error) {

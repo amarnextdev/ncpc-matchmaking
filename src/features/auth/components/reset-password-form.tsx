@@ -53,6 +53,9 @@ export function ResetPasswordForm({ email }: { email: string }) {
   return (
     <section aria-labelledby="reset-title" className="flex flex-col gap-6">
       <div className="flex flex-col gap-1.5">
+        <span className="text-[13px] font-semibold text-muted-foreground">
+          Step 3 of 3 · New password
+        </span>
         <h1 id="reset-title" className="text-[28px] font-bold tracking-tight">
           Choose a new password
         </h1>

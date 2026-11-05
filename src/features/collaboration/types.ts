@@ -66,7 +66,8 @@ export type Meeting = {
 
 /** Database state of a deal (real organisations only). */
 export type DealLive = {
-  enquiryId: string;
+  /** The accepted enquiry that opened it; null when the deal was added inside an existing connection */
+  enquiryId: string | null;
   /** null until someone presses "Start deal" */
   dealId: string | null;
   projectId: string | null;
@@ -117,6 +118,16 @@ export type Conversation = {
   unread: Record<string, number>;
   messages: Message[];
   deals: Deal[];
+  /** Live projects of either side that can still become a deal here */
+  addable?: AddableProject[];
+};
+
+/** A live project, with the open roles the other side can take. */
+export type AddableProject = {
+  projectId: string;
+  title: string;
+  ownerIsMe: boolean;
+  roles: LookingFor[];
 };
 
 /** A conversation as one viewer sees it. */
@@ -132,6 +143,7 @@ export type ConversationView = {
   tagStage: DealStage | "not_started";
   messages: Message[];
   deals: Deal[];
+  addable: AddableProject[];
 };
 
 /** An enquiry the viewer received and has not answered yet. */

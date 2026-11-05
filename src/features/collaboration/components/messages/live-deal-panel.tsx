@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowUpRight,
@@ -11,9 +10,9 @@ import {
   Loader2,
   Lock,
   PartyPopper,
+  Plus,
   RotateCcw,
 } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,9 +27,10 @@ import {
   setDealStageAction,
   startDealAction,
 } from "../../deal-actions";
+import { useDealRun } from "../../deal-sync";
 import { offerSummary } from "../../forms";
 import type { ConversationView, Deal, DealLive } from "../../types";
-import { CollabRequestDialog, OfferFormDialog } from "./offer-dialogs";
+import { AddProjectDialog, CollabRequestDialog, OfferFormDialog } from "./offer-dialogs";
 
 const dayFmt = new Intl.DateTimeFormat("en-ZA", { day: "numeric", month: "short" });
 const NEXT_STAGE: Record<string, "due_diligence" | "agreement" | undefined> = {
@@ -75,11 +75,11 @@ export function LiveDealPanel({
   deals: Deal[];
   onDealChange: (id: string) => void;
 }) {
-  const router = useRouter();
   const live = deal.live;
   const owner = live.isOwner ? c.me : c.them;
   const partner = live.isOwner ? c.them : c.me;
-  const [pending, start] = useTransition();
+  const { busy, syncing, run: act } = useDealRun();
+  const pending = busy !== null;
   const [requestOpen, setRequestOpen] = useState(false);
   const [offerOpen, setOfferOpen] = useState(false);
   const [note, setNote] = useState(live.myNote);
@@ -91,16 +91,12 @@ export function LiveDealPanel({
 
   useEffect(() => setNote(live.myNote), [live.myNote, deal.id]);
 
-  const run = (fn: () => Promise<{ ok: boolean; error?: string }>, success?: string) =>
-    start(async () => {
-      const r = await fn().catch(() => ({
-        ok: false,
-        error: "Something went wrong. Please try again.",
-      }));
-      if (!r.ok) return void toast.error(("error" in r && r.error) || "Something went wrong.");
-      if (success) toast.success(success);
-      router.refresh();
-    });
+  const run = (
+    fn: () => Promise<{ ok: true } | { ok: false; error: string }>,
+    success?: string,
+    key = "main",
+    onDone?: () => void,
+  ) => void act(key, fn, { success, onDone });
 
   function onNote(v: string) {
     setNote(v);
@@ -123,21 +119,55 @@ export function LiveDealPanel({
     ? Boolean(live.isOwner ? part.ownerConfirmedAt : part.partnerConfirmedAt)
     : false;
 
-  const progress = (
-    <Progress
-      steps={[
-        { label: "Deal started", who: "Either side", done: Boolean(live.dealId) },
-        { label: "Collaboration request", who: owner.name, done: Boolean(req) },
-        {
-          label: req?.status === "changes_requested" ? "Offer updated" : "Offer sent",
-          who: partner.name,
-          done: Boolean(part) || req?.status === "submitted" || req?.status === "accepted",
-        },
-        { label: "Offer accepted", who: owner.name, done: Boolean(part) },
-        { label: "Both confirm", who: "Both", done: part?.status === "active" },
-      ]}
-    />
-  );
+  // "You" for my side, a short name for theirs ("GreenFuture Energy (Pty) Ltd" → "GreenFuture Energy").
+  const who = (p: { name: string }) => (p === c.me ? "You" : shortName(p.name));
+  const steps = [
+    { label: "Deal started", who: "Either side", done: Boolean(live.dealId) },
+    { label: "Collaboration request", who: who(owner), done: Boolean(req) },
+    {
+      label: req?.status === "changes_requested" ? "Offer updated" : "Offer sent",
+      who: who(partner),
+      done: Boolean(part) || req?.status === "submitted" || req?.status === "accepted",
+    },
+    { label: "Offer accepted", who: who(owner), done: Boolean(part) },
+    { label: "Both confirm", who: "Both", done: part?.status === "active" },
+  ];
+  const progress = <Progress steps={steps} />;
+
+  const stageLabel = DEAL_STAGES.find((x) => x.value === deal.stage)?.label ?? "Not started";
+  const nextLabel = next ? DEAL_STAGES.find((x) => x.value === next)?.label : null;
+  const stageRow = live.dealId ? (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t pt-3 text-xs">
+      <span className="text-muted-foreground">Deal stage</span>
+      <span className="flex items-center gap-1" aria-hidden>
+        {DEAL_STAGES.map((x, i) => (
+          <span
+            key={x.value}
+            className={cn(
+              "h-1.5 w-5 rounded-full",
+              i < stageIndex ? "bg-success-bar" : i === stageIndex ? "bg-primary" : "bg-border",
+            )}
+          />
+        ))}
+      </span>
+      <span className="font-semibold">{stageLabel}</span>
+      {live.isOwner && next && !part ? (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() =>
+            run(
+              () => setDealStageAction({ dealId: live.dealId!, stage: next }),
+              `Moved to ${nextLabel}`,
+            )
+          }
+          className="ml-auto font-semibold text-primary hover:underline disabled:opacity-60"
+        >
+          Move to {nextLabel} →
+        </button>
+      ) : null}
+    </div>
+  ) : null;
 
   // ── Not started ──
   if (!live.dealId) {
@@ -150,6 +180,7 @@ export function LiveDealPanel({
           owner={owner.name}
           partner={partner.name}
           isOwner={live.isOwner}
+          conversation={c}
         />
         {live.projectId ? (
           <>
@@ -162,7 +193,9 @@ export function LiveDealPanel({
               <Button
                 className="mt-1 self-start bg-white font-bold text-primary hover:bg-white/90"
                 disabled={pending}
-                onClick={() => run(() => startDealAction(live.enquiryId), "Deal started")}
+                onClick={() =>
+                  live.enquiryId && run(() => startDealAction(live.enquiryId!), "Deal started")
+                }
               >
                 {pending ? <Loader2 className="animate-spin" aria-hidden /> : null} Start deal
               </Button>
@@ -189,280 +222,285 @@ export function LiveDealPanel({
         owner={owner.name}
         partner={partner.name}
         isOwner={live.isOwner}
+        conversation={c}
+        stage={stageRow}
       />
 
-      <Section title="Progress">{progress}</Section>
-
-      {/* Stage */}
-      <Section title="Stage">
-        <ol className="grid grid-cols-4 gap-1.5">
-          {DEAL_STAGES.map((s, i) => (
-            <li key={s.value} className="flex flex-col gap-1.5">
-              <span
-                className={cn(
-                  "h-[5px] rounded-full",
-                  i < stageIndex ? "bg-success-bar" : i === stageIndex ? "bg-primary" : "bg-border",
-                )}
-              />
-              <span
-                className={cn(
-                  "text-[11px] leading-tight",
-                  i === stageIndex ? "font-bold" : "text-muted-foreground",
-                )}
-              >
-                {s.label}
-              </span>
-            </li>
-          ))}
-        </ol>
-        {live.isOwner && next && !part ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline-primary"
-              size="sm"
-              className="border-[1.5px] font-bold"
-              disabled={pending}
-              onClick={() =>
-                run(
-                  () => setDealStageAction({ dealId: live.dealId!, stage: next }),
-                  `Moved to ${DEAL_STAGES.find((s) => s.value === next)?.label}`,
-                )
-              }
-            >
-              Move to {DEAL_STAGES.find((s) => s.value === next)?.label}
-            </Button>
-            <span className="text-xs text-muted-foreground">Only you can change the stage</span>
-          </div>
-        ) : null}
-      </Section>
-
-      {/* What to do next */}
-      <Section title="Next step">
-        {part?.status === "active" ? (
-          <div className="flex flex-col gap-3 rounded-xl border border-success/20 bg-success-soft p-4">
-            <div className="flex items-center gap-2.5 text-success">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-success text-white">
-                <PartyPopper className="size-[18px]" aria-hidden />
-              </span>
-              <div className="min-w-0">
-                <p className="text-[15px] font-bold">Partnership is live</p>
-                <p className="text-xs text-success/85">
-                  Shown on the project page and both profiles
-                </p>
-              </div>
-            </div>
-            <dl className="grid grid-cols-3 divide-x divide-success/15 rounded-lg bg-card/80 text-center">
-              <div className="px-2 py-2.5">
-                <dt className="text-[11px] text-muted-foreground">Partner</dt>
-                <dd className="truncate text-[13px] font-bold">
-                  {partner.name.replace(/\s*\(Pty\)\s*Ltd\.?$/i, "")}
-                </dd>
-              </div>
-              <div className="px-2 py-2.5">
-                <dt className="text-[11px] text-muted-foreground">Role</dt>
-                <dd className="text-[13px] font-bold">{labelFor(LOOKING_FOR, deal.role)}</dd>
-              </div>
-              <div className="px-2 py-2.5">
-                <dt className="text-[11px] text-muted-foreground">Amount</dt>
-                <dd className="text-[13px] font-bold tabular-nums">
-                  {part.amount ? formatRand(part.amount) : "—"}
-                </dd>
-              </div>
-            </dl>
-          </div>
-        ) : part ? (
-          <div className="flex flex-col gap-3">
-            <div>
-              <p className="text-sm font-bold">Confirm your partnership</p>
-              <p className="mt-0.5 text-xs leading-[18px] text-muted-foreground">
-                Sign your agreement outside the platform, then both confirm here.
-              </p>
-            </div>
-            <ul className="divide-y rounded-lg border">
-              {[
-                { who: owner, at: part.ownerConfirmedAt, role: "Project owner" },
-                {
-                  who: partner,
-                  at: part.partnerConfirmedAt,
-                  role: `${labelFor(LOOKING_FOR, deal.role)}${part.amount ? ` · ${formatRand(part.amount)}` : ""}`,
-                },
-              ].map((row) => (
-                <li key={row.who.slug} className="flex items-center gap-2.5 px-3 py-2.5">
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-[13px] font-semibold">{row.who.name}</span>
-                    <span className="text-[11px] text-muted-foreground">{row.role}</span>
-                  </span>
-                  {row.at ? (
-                    <span className="flex items-center gap-1 text-xs font-semibold text-success">
-                      <Check className="size-3.5" strokeWidth={2.8} aria-hidden /> Confirmed{" "}
-                      {dayFmt.format(new Date(row.at))}
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1.5 text-xs font-semibold text-warning">
-                      <span className="size-1.5 rounded-full bg-current" aria-hidden /> Waiting
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-            {!iConfirmed ? (
+      <Section
+        title="Collaboration"
+        aside={
+          <span className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground tabular-nums">
+            {syncing ? (
               <>
-                {live.isOwner && part.amount ? (
-                  <label className="flex items-center gap-2.5 text-[13px]">
-                    <Switch checked={amountPublic} onCheckedChange={setAmountPublic} />
-                    Show the amount on the project page
-                  </label>
-                ) : null}
-                <Button
-                  disabled={pending}
-                  onClick={() =>
-                    run(
-                      () => confirmPartnershipAction({ partnershipId: part.id, amountPublic }),
-                      "Confirmed. Waiting for the other side, if they have not confirmed yet.",
-                    )
-                  }
-                >
-                  {pending ? <Loader2 className="animate-spin" aria-hidden /> : null} Confirm
-                  partnership
-                </Button>
+                <Loader2 className="size-3 animate-spin" aria-hidden /> Updating…
               </>
             ) : (
-              <p className="text-xs text-muted-foreground">
-                You confirmed. Waiting for {live.isOwner ? partner.name : owner.name}.
-              </p>
+              `${steps.filter((x) => x.done).length} of ${steps.length} done`
             )}
-          </div>
-        ) : req &&
-          (req.status === "submitted" ||
-            (req.status === "changes_requested" && !live.isOwner) ||
-            req.status === "requested") ? (
-          <div className="flex flex-col gap-3">
-            {req.status === "requested" || req.status === "changes_requested" ? (
-              live.isOwner ? (
-                <p className="flex items-center gap-2 text-[13px] text-foreground/80">
-                  <Clock3 className="size-4 text-warning" aria-hidden /> Waiting for {partner.name}
-                  &apos;s offer
-                </p>
-              ) : (
-                <>
-                  <div className="text-[13px] leading-5">
-                    <p className="font-bold">
-                      {req.status === "changes_requested"
-                        ? `${owner.name} asked for changes`
-                        : `${owner.name} asked for your offer`}
-                    </p>
-                    {req.ownerNote ? (
-                      <p className="mt-1 text-foreground/80">&ldquo;{req.ownerNote}&rdquo;</p>
-                    ) : null}
+          </span>
+        }
+      >
+        <Progress
+          steps={steps}
+          current={
+            <>
+              {part?.status === "active" ? (
+                <div className="flex flex-col gap-3 rounded-xl border border-success/20 bg-success-soft p-4">
+                  <div className="flex items-center gap-2.5 text-success">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-success text-white">
+                      <PartyPopper className="size-[18px]" aria-hidden />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[15px] font-bold">Partnership is live</p>
+                      <p className="text-xs text-success/85">
+                        Shown on the project page and both profiles
+                      </p>
+                    </div>
                   </div>
-                  <Button onClick={() => setOfferOpen(true)}>
-                    {req.status === "changes_requested"
-                      ? "Update your offer"
-                      : "Fill in your offer"}
-                  </Button>
-                </>
-              )
-            ) : (
-              <>
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-bold">
-                    {live.isOwner ? `${partner.name}'s offer` : "Your offer"}
-                    <span className="font-medium text-muted-foreground"> · v{req.version}</span>
-                  </p>
-                  <span className="rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-bold text-warning">
-                    {live.isOwner ? "Waiting for you" : "In review"}
-                  </span>
+                  <dl className="grid grid-cols-3 divide-x divide-success/15 rounded-lg bg-card/80 text-center">
+                    <div className="px-2 py-2.5">
+                      <dt className="text-[11px] text-muted-foreground">Partner</dt>
+                      <dd className="truncate text-[13px] font-bold">
+                        {partner.name.replace(/\s*\(Pty\)\s*Ltd\.?$/i, "")}
+                      </dd>
+                    </div>
+                    <div className="px-2 py-2.5">
+                      <dt className="text-[11px] text-muted-foreground">Role</dt>
+                      <dd className="text-[13px] font-bold">{labelFor(LOOKING_FOR, deal.role)}</dd>
+                    </div>
+                    <div className="px-2 py-2.5">
+                      <dt className="text-[11px] text-muted-foreground">Amount</dt>
+                      <dd className="text-[13px] font-bold tabular-nums">
+                        {part.amount ? formatRand(part.amount) : "—"}
+                      </dd>
+                    </div>
+                  </dl>
                 </div>
-                <dl className="divide-y rounded-lg border text-[13px]">
-                  {summary.map((s) => (
-                    <div key={s.label} className="grid grid-cols-[110px_1fr] gap-2 px-3 py-2">
-                      <dt className="text-muted-foreground">{s.label}</dt>
-                      <dd className={cn("leading-5", s.strong && "font-bold")}>{s.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-                {live.isOwner ? (
-                  askChanges ? (
-                    <div className="flex flex-col gap-2">
-                      <Textarea
-                        rows={3}
-                        value={changes}
-                        onChange={(e) => setChanges(e.target.value)}
-                        placeholder="What should they change?"
-                        className="resize-none text-[13px]"
-                      />
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => setAskChanges(false)}>
-                          Cancel
-                        </Button>
-                        <Button
-                          size="sm"
-                          className="flex-1"
-                          disabled={pending || changes.trim().length < 5}
-                          onClick={() =>
-                            run(
-                              () =>
-                                reviewOfferAction({
-                                  requestId: req.id,
-                                  decision: "changes",
-                                  note: changes,
-                                }),
-                              "Changes requested",
-                            )
-                          }
-                        >
-                          <RotateCcw aria-hidden /> Send request for changes
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex gap-2">
+              ) : part ? (
+                <div className="flex flex-col gap-3 rounded-xl border bg-surface-subtle p-3.5">
+                  <div>
+                    <p className="text-sm font-bold">Confirm your partnership</p>
+                    <p className="mt-0.5 text-xs leading-[18px] text-muted-foreground">
+                      Sign your agreement outside the platform, then both confirm here.
+                    </p>
+                  </div>
+                  <ul className="divide-y rounded-lg border">
+                    {[
+                      { who: owner, at: part.ownerConfirmedAt, role: "Project owner" },
+                      {
+                        who: partner,
+                        at: part.partnerConfirmedAt,
+                        role: `${labelFor(LOOKING_FOR, deal.role)}${part.amount ? ` · ${formatRand(part.amount)}` : ""}`,
+                      },
+                    ].map((row) => (
+                      <li key={row.who.slug} className="flex items-center gap-2.5 px-3 py-2.5">
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate text-[13px] font-semibold">{row.who.name}</span>
+                          <span className="text-[11px] text-muted-foreground">{row.role}</span>
+                        </span>
+                        {row.at ? (
+                          <span className="flex items-center gap-1 text-xs font-semibold text-success">
+                            <Check className="size-3.5" strokeWidth={2.8} aria-hidden /> Confirmed{" "}
+                            {dayFmt.format(new Date(row.at))}
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1.5 text-xs font-semibold text-warning">
+                            <span className="size-1.5 rounded-full bg-current" aria-hidden />{" "}
+                            Waiting
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  {!iConfirmed ? (
+                    <>
+                      {live.isOwner && part.amount ? (
+                        <label className="flex items-center gap-2.5 text-[13px]">
+                          <Switch checked={amountPublic} onCheckedChange={setAmountPublic} />
+                          Show the amount on the project page
+                        </label>
+                      ) : null}
                       <Button
-                        variant="outline"
-                        className="flex-1"
-                        onClick={() => setAskChanges(true)}
-                      >
-                        Ask for changes
-                      </Button>
-                      <Button
-                        className="flex-1 bg-success hover:bg-success/90"
                         disabled={pending}
                         onClick={() =>
                           run(
-                            () => reviewOfferAction({ requestId: req.id, decision: "accept" }),
-                            "Offer accepted",
+                            () =>
+                              confirmPartnershipAction({ partnershipId: part.id, amountPublic }),
+                            "Confirmed. Waiting for the other side, if they have not confirmed yet.",
                           )
                         }
                       >
-                        {pending ? <Loader2 className="animate-spin" aria-hidden /> : null} Accept
-                        offer
+                        {pending ? <Loader2 className="animate-spin" aria-hidden /> : null} Confirm
+                        partnership
                       </Button>
-                    </div>
-                  )
-                ) : null}
-              </>
-            )}
-          </div>
-        ) : live.isOwner ? (
-          <div className="flex flex-col gap-2 rounded-xl bg-primary p-4 text-white">
-            <p className="text-[15px] font-bold">Ready to work together?</p>
-            <p className="text-[13px] leading-[19px] text-[#D6E0F0]">
-              Send {partner.name} a collaboration request. They fill in their offer, you review it,
-              then you both confirm.
-            </p>
-            <Button
-              className="mt-1 self-start bg-white font-bold text-primary hover:bg-white/90"
-              onClick={() => setRequestOpen(true)}
-            >
-              Send collaboration request
-            </Button>
-          </div>
-        ) : (
-          <p className="rounded-xl bg-primary-soft p-3 text-xs leading-[18px] text-primary">
-            When you are ready, {owner.name} sends you a collaboration request to fill in your
-            offer.
-          </p>
-        )}
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      You confirmed. Waiting for {live.isOwner ? partner.name : owner.name}.
+                    </p>
+                  )}
+                </div>
+              ) : req &&
+                (req.status === "submitted" ||
+                  (req.status === "changes_requested" && !live.isOwner) ||
+                  req.status === "requested") ? (
+                <div className="flex flex-col gap-3 rounded-xl border bg-surface-subtle p-3.5">
+                  {req.status === "requested" || req.status === "changes_requested" ? (
+                    live.isOwner ? (
+                      <p className="flex items-center gap-2 text-[13px] text-foreground/80">
+                        <Clock3 className="size-4 text-warning" aria-hidden /> Waiting for{" "}
+                        {shortName(partner.name)}&apos;s offer. You get a notification when it
+                        arrives.
+                      </p>
+                    ) : (
+                      <>
+                        <p className="text-[13px] leading-5 font-bold">
+                          {req.status === "changes_requested"
+                            ? `${shortName(owner.name)} asked for changes`
+                            : `${shortName(owner.name)} asked for your offer`}
+                        </p>
+                        {req.ownerNote ? (
+                          <div className="flex gap-2.5">
+                            <span
+                              aria-hidden
+                              className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white"
+                            >
+                              {owner.initials}
+                            </span>
+                            <p className="min-w-0 rounded-xl rounded-tl-sm border bg-card px-3 py-2 text-xs leading-[17px]">
+                              &ldquo;{req.ownerNote}&rdquo;
+                            </p>
+                          </div>
+                        ) : null}
+                        <Button className="w-full" onClick={() => setOfferOpen(true)}>
+                          {req.status === "changes_requested"
+                            ? "Update your offer"
+                            : "Fill in your offer"}
+                        </Button>
+                      </>
+                    )
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-bold">
+                          {live.isOwner ? `${partner.name}'s offer` : "Your offer"}
+                          <span className="font-medium text-muted-foreground">
+                            {" "}
+                            · v{req.version}
+                          </span>
+                        </p>
+                        <span className="rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-bold text-warning">
+                          {live.isOwner ? "Waiting for you" : "In review"}
+                        </span>
+                      </div>
+                      <dl className="divide-y rounded-lg border text-[13px]">
+                        {summary.map((s) => (
+                          <div key={s.label} className="grid grid-cols-[110px_1fr] gap-2 px-3 py-2">
+                            <dt className="text-muted-foreground">{s.label}</dt>
+                            <dd className={cn("leading-5", s.strong && "font-bold")}>{s.value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                      {live.isOwner ? (
+                        askChanges ? (
+                          <div className="flex flex-col gap-2">
+                            <Textarea
+                              rows={3}
+                              value={changes}
+                              onChange={(e) => setChanges(e.target.value)}
+                              placeholder="What should they change?"
+                              className="resize-none text-[13px]"
+                            />
+                            <div className="flex gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setAskChanges(false)}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                size="sm"
+                                className="flex-1"
+                                disabled={pending || changes.trim().length < 5}
+                                onClick={() =>
+                                  run(
+                                    () =>
+                                      reviewOfferAction({
+                                        requestId: req.id,
+                                        decision: "changes",
+                                        note: changes,
+                                      }),
+                                    `Changes requested. ${partner.name} can now update the offer.`,
+                                    "changes",
+                                    () => {
+                                      setAskChanges(false);
+                                      setChanges("");
+                                    },
+                                  )
+                                }
+                              >
+                                {busy === "changes" ? (
+                                  <Loader2 className="animate-spin" aria-hidden />
+                                ) : (
+                                  <RotateCcw aria-hidden />
+                                )}{" "}
+                                Send request for changes
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              className="flex-1"
+                              onClick={() => setAskChanges(true)}
+                            >
+                              Ask for changes
+                            </Button>
+                            <Button
+                              className="flex-1 bg-success hover:bg-success/90"
+                              disabled={pending}
+                              onClick={() =>
+                                run(
+                                  () =>
+                                    reviewOfferAction({ requestId: req.id, decision: "accept" }),
+                                  "Offer accepted",
+                                )
+                              }
+                            >
+                              {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}{" "}
+                              Accept offer
+                            </Button>
+                          </div>
+                        )
+                      ) : null}
+                    </>
+                  )}
+                </div>
+              ) : live.isOwner ? (
+                <div className="flex flex-col gap-2 rounded-xl bg-primary p-4 text-white">
+                  <p className="text-[15px] font-bold">Ready to work together?</p>
+                  <p className="text-[13px] leading-[19px] text-[#D6E0F0]">
+                    Send {partner.name} a collaboration request. They fill in their offer, you
+                    review it, then you both confirm.
+                  </p>
+                  <Button
+                    className="mt-1 self-start bg-white font-bold text-primary hover:bg-white/90"
+                    onClick={() => setRequestOpen(true)}
+                  >
+                    Send collaboration request
+                  </Button>
+                </div>
+              ) : (
+                <p className="rounded-xl bg-primary-soft p-3 text-xs leading-[18px] text-primary">
+                  When you are ready, {owner.name} sends you a collaboration request to fill in your
+                  offer.
+                </p>
+              )}
+            </>
+          }
+        />
       </Section>
 
       {/* Notes */}
@@ -514,7 +552,7 @@ export function LiveDealPanel({
   );
 }
 
-/** Project, who is who, and a project picker when there are several deals. */
+/** Project tabs (one per deal), who is who, the deal stage, and "Add a project". */
 function DealHeader({
   deal,
   deals,
@@ -522,6 +560,8 @@ function DealHeader({
   owner,
   partner,
   isOwner,
+  conversation,
+  stage,
 }: {
   deal: Deal;
   deals: Deal[];
@@ -529,96 +569,208 @@ function DealHeader({
   owner: string;
   partner: string;
   isOwner: boolean;
+  conversation: ConversationView;
+  stage?: React.ReactNode;
 }) {
+  const [adding, setAdding] = useState(false);
   const role = labelFor(LOOKING_FOR, deal.role).toLowerCase();
+  const canAdd = conversation.addable.length > 0;
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-l-4 border-l-primary bg-card p-4 shadow-[0_1px_2px_rgb(15_23_42/0.04)]">
-      {deals.length > 1 ? (
-        <select
-          value={deal.id}
-          onChange={(e) => onDealChange(e.target.value)}
-          aria-label="Project"
-          className="h-9 rounded-lg border bg-background px-2.5 text-sm font-semibold"
-        >
-          {deals.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.projectTitle}
-            </option>
-          ))}
-        </select>
-      ) : (
-        <p className="text-[15px] leading-5 font-bold">{deal.projectTitle}</p>
-      )}
-      <dl className="grid grid-cols-2 gap-2 text-xs">
-        <div>
-          <dt className="text-muted-foreground">Project owner</dt>
-          <dd className="font-semibold">{isOwner ? "You" : owner}</dd>
+    <>
+      {deals.length > 1 || canAdd ? (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">
+              Projects with {conversation.them.name.replace(/\s*\(Pty\)\s*Ltd\.?$/i, "")}
+            </p>
+            <span className="text-[11px] text-muted-foreground tabular-nums">{deals.length}</span>
+          </div>
+          <div role="tablist" aria-label="Projects" className="flex flex-wrap gap-1.5">
+            {deals.map((d) => {
+              const on = d.id === deal.id;
+              return (
+                <button
+                  key={d.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={on}
+                  onClick={() => onDealChange(d.id)}
+                  className={cn(
+                    "flex max-w-full items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+                    on
+                      ? "border-primary bg-primary text-white"
+                      : "bg-card text-foreground/80 hover:border-primary/50",
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "size-1.5 shrink-0 rounded-full",
+                      d.live?.partnership?.status === "active"
+                        ? "bg-success-bar"
+                        : d.stage === "not_started"
+                          ? on
+                            ? "bg-white/60"
+                            : "bg-border"
+                          : on
+                            ? "bg-white"
+                            : "bg-primary",
+                    )}
+                  />
+                  <span className="truncate">{d.projectTitle}</span>
+                </button>
+              );
+            })}
+            {canAdd ? (
+              <button
+                type="button"
+                onClick={() => setAdding(true)}
+                className="flex items-center gap-1 rounded-full border border-dashed border-primary/50 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary-soft/60"
+              >
+                <Plus className="size-3.5" aria-hidden /> Add a project
+              </button>
+            ) : null}
+          </div>
         </div>
-        <div>
-          <dt className="text-muted-foreground">Partner as {role}</dt>
-          <dd className="font-semibold">{isOwner ? partner : "You"}</dd>
-        </div>
-      </dl>
-      {deal.projectSlug ? (
-        <Link
-          href={routes.opportunities.detail(deal.projectSlug)}
-          className="flex w-fit items-center gap-1 text-xs font-semibold text-primary hover:underline"
-        >
-          View project <ArrowUpRight className="size-3.5" aria-hidden />
-        </Link>
       ) : null}
-    </div>
+
+      <div className="flex flex-col gap-3 rounded-xl border border-l-4 border-l-primary bg-card p-4 shadow-[0_1px_2px_rgb(15_23_42/0.04)]">
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-[15px] leading-5 font-bold">{deal.projectTitle}</p>
+          {deal.projectSlug ? (
+            <Link
+              href={routes.opportunities.detail(deal.projectSlug)}
+              className="flex shrink-0 items-center gap-1 text-xs font-semibold text-primary hover:underline"
+            >
+              View project <ArrowUpRight className="size-3.5" aria-hidden />
+            </Link>
+          ) : null}
+        </div>
+        <dl className="grid grid-cols-2 gap-2 text-xs">
+          <div>
+            <dt className="text-muted-foreground">Project owner</dt>
+            <dd className="font-semibold">{isOwner ? "You" : owner}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Partner as {role}</dt>
+            <dd className="font-semibold">{isOwner ? partner : "You"}</dd>
+          </div>
+        </dl>
+        {stage}
+      </div>
+
+      {canAdd ? (
+        <AddProjectDialog
+          open={adding}
+          onOpenChange={setAdding}
+          conversation={conversation}
+          onAdded={onDealChange}
+        />
+      ) : null}
+    </>
   );
 }
 
-/** The five collaboration steps; the first unfinished one is "now". */
-function Progress({ steps }: { steps: { label: string; who: string; done: boolean }[] }) {
+/** Collaboration steps; the first unfinished one is "now" and holds what to do next. */
+function Progress({
+  steps,
+  current,
+}: {
+  steps: { label: string; who: string; done: boolean }[];
+  current?: React.ReactNode;
+}) {
   const now = steps.findIndex((s) => !s.done);
+  const [showDone, setShowDone] = useState(false);
+  const fold = Boolean(current) && now >= 2 && !showDone;
   return (
-    <ol className="flex flex-col">
-      {steps.map((s, i) => {
-        const current = i === now;
-        return (
-          <li key={s.label} className="relative flex gap-3 pb-3.5 last:pb-0">
-            {i < steps.length - 1 ? (
+    <>
+      <ol className="flex flex-col">
+        {fold ? (
+          <li className="relative flex gap-3 pb-4">
+            <span
+              aria-hidden
+              className="absolute top-7 bottom-1 left-[11px] w-0.5 rounded-full bg-success-bar"
+            />
+            <span
+              aria-hidden
+              className="relative z-[1] flex size-6 shrink-0 items-center justify-center rounded-full bg-success-bar text-white"
+            >
+              <Check className="size-3.5" strokeWidth={3} />
+            </span>
+            <div className="flex min-w-0 flex-1 items-baseline justify-between gap-2 pt-0.5">
+              <span className="text-[13px] leading-5 font-semibold">{now} steps done</span>
+              <button
+                type="button"
+                onClick={() => setShowDone(true)}
+                className="text-[11px] font-semibold text-primary hover:underline"
+              >
+                Show
+              </button>
+            </div>
+          </li>
+        ) : null}
+        {steps.map((s, i) => {
+          if (fold && i < now) return null;
+          const isNow = i === now;
+          return (
+            <li key={s.label} className="relative flex gap-3 pb-4 last:pb-0">
+              {i < steps.length - 1 ? (
+                <span
+                  aria-hidden
+                  className={cn(
+                    "absolute top-7 bottom-1 left-[11px] w-0.5 rounded-full",
+                    s.done ? "bg-success-bar" : "bg-border",
+                  )}
+                />
+              ) : null}
               <span
                 aria-hidden
                 className={cn(
-                  "absolute top-6 bottom-0 left-[11px] w-0.5",
-                  s.done ? "bg-success-bar" : "bg-border",
-                )}
-              />
-            ) : null}
-            <span
-              aria-hidden
-              className={cn(
-                "relative z-[1] flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold",
-                s.done
-                  ? "bg-success-bar text-white"
-                  : current
-                    ? "bg-primary text-white ring-4 ring-primary-soft"
-                    : "border-2 border-input bg-background text-muted-foreground",
-              )}
-            >
-              {s.done ? <Check className="size-3.5" strokeWidth={3} /> : i + 1}
-            </span>
-            <span className="flex min-w-0 flex-col pt-0.5">
-              <span
-                className={cn(
-                  "text-[13px] leading-5",
-                  current ? "font-bold" : s.done ? "font-semibold" : "text-muted-foreground",
+                  "relative z-[1] flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold",
+                  s.done
+                    ? "bg-success-bar text-white"
+                    : isNow
+                      ? "bg-primary text-white ring-4 ring-primary-soft"
+                      : "border-2 border-input bg-background text-muted-foreground",
                 )}
               >
-                {s.label}
-                <span className="sr-only">{s.done ? " (done)" : current ? " (now)" : ""}</span>
+                {s.done ? <Check className="size-3.5" strokeWidth={3} /> : i + 1}
               </span>
-              <span className="text-[11px] text-muted-foreground">{s.who}</span>
-            </span>
-          </li>
-        );
-      })}
-    </ol>
+              <div className="flex min-w-0 flex-1 flex-col gap-2.5 pt-0.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span
+                    className={cn(
+                      "text-[13px] leading-5",
+                      isNow ? "font-bold" : s.done ? "font-semibold" : "text-muted-foreground",
+                    )}
+                  >
+                    {s.label}
+                    <span className="sr-only">{s.done ? " (done)" : isNow ? " (now)" : ""}</span>
+                  </span>
+                  <span
+                    className={cn(
+                      "shrink-0 text-[11px]",
+                      isNow ? "font-semibold text-primary" : "text-muted-foreground",
+                    )}
+                  >
+                    {isNow && current ? "Now · " : ""}
+                    {s.who}
+                  </span>
+                </div>
+                {isNow && current ? <div>{current}</div> : null}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      {now === -1 && current ? current : null}
+    </>
   );
+}
+
+/** "GreenFuture Energy (Pty) Ltd" → "GreenFuture Energy" */
+function shortName(name: string) {
+  return name.replace(/\s*\((pty|proprietary)\)\s*(ltd|limited)\.?$/i, "").trim();
 }
 
 function Contact({ c }: { c: ConversationView }) {

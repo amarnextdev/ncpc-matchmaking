@@ -20,6 +20,7 @@ import type { ConversationView, Deal, DealDocument, EnquiryRequest, Message } fr
 import { dealStageLabel } from "../../views";
 import { DealPanel } from "../messages/deal-panel";
 import { LiveDealPanel } from "../messages/live-deal-panel";
+import { DealSyncProvider } from "../../deal-sync";
 import { startDealAction } from "../../deal-actions";
 import { dealTodo } from "../../deal-todo";
 import { MessageItem } from "../messages/message-item";
@@ -233,10 +234,12 @@ export function MessagingDock({
     // Real deals start on the server (the "Deal started" event then comes from the database).
     if (d?.live) {
       setDealFor((s) => ({ ...s, [c.id]: dealId }));
+      if (!d.live.enquiryId) return;
       void startDealAction(d.live.enquiryId).then((r) => {
         if (!r.ok) toast.error(r.error);
         else {
           toast.success("Deal started");
+          rt.sendDeal(c.id, c.me.slug);
           router.refresh();
         }
       });
@@ -322,12 +325,14 @@ export function MessagingDock({
               {dealMin ? null : (
                 <div className="min-h-0 flex-1">
                   {deal.live ? (
-                    <LiveDealPanel
-                      conversation={c}
-                      deal={deal as typeof deal & { live: NonNullable<typeof deal.live> }}
-                      deals={c.deals}
-                      onDealChange={(dealId) => setDealFor((x) => ({ ...x, [id]: dealId }))}
-                    />
+                    <DealSyncProvider notify={() => rt.sendDeal(c.id, c.me.slug)}>
+                      <LiveDealPanel
+                        conversation={c}
+                        deal={deal as typeof deal & { live: NonNullable<typeof deal.live> }}
+                        deals={c.deals}
+                        onDealChange={(dealId) => setDealFor((x) => ({ ...x, [id]: dealId }))}
+                      />
+                    </DealSyncProvider>
                   ) : (
                     <DealPanel
                       conversation={c}
@@ -438,8 +443,16 @@ export function MessagingDock({
                   </button>
                 ) : null}
                 {(() => {
-                  const todo = dealTodo(deal?.live, c.them.name);
-                  if (!todo || dealOf === id) return null;
+                  // The first project (current one first) where it is this side's turn.
+                  const ordered = deal
+                    ? [deal, ...c.deals.filter((d) => d.id !== deal.id)]
+                    : c.deals;
+                  const hit = ordered
+                    .map((d) => ({ d, todo: dealTodo(d.live, c.them.name) }))
+                    .find((x) => x.todo);
+                  if (!hit || dealOf === id) return null;
+                  const todo = hit.todo!;
+                  const multi = c.deals.length > 1;
                   return (
                     <div
                       role="status"
@@ -447,6 +460,11 @@ export function MessagingDock({
                     >
                       <span className="flex min-w-0 flex-1 flex-col">
                         <span className="truncate text-[13px] font-bold">{todo.title}</span>
+                        {multi ? (
+                          <span className="truncate text-[11px] font-semibold text-white/80">
+                            {hit.d.projectTitle}
+                          </span>
+                        ) : null}
                         <span className="line-clamp-2 text-[11px] leading-4 text-[#D6E0F0]">
                           {todo.text}
                         </span>
@@ -454,7 +472,10 @@ export function MessagingDock({
                       <Button
                         size="sm"
                         className="shrink-0 bg-white font-bold text-primary hover:bg-white/90"
-                        onClick={() => openDeal(id)}
+                        onClick={() => {
+                          setDealFor((x) => ({ ...x, [id]: hit.d.id }));
+                          openDeal(id);
+                        }}
                       >
                         {todo.cta}
                       </Button>

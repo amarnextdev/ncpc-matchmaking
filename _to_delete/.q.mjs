@@ -1,0 +1,10 @@
+import fs from 'node:fs';
+import postgres from 'postgres';
+const env = Object.fromEntries(fs.readFileSync('.env.local','utf8').split(/\r?\n/).filter(l=>l.includes('=')&&!l.startsWith('#')).map(l=>{const i=l.indexOf('=');return [l.slice(0,i).trim(), l.slice(i+1).trim().replace(/^["']|["']$/g,'')]}));
+const sql = postgres(env.DATABASE_URL, { prepare:false, max:1, connect_timeout:10 });
+const q = async (s) => { try { console.log(JSON.stringify(await sql.unsafe(s))); } catch(e){ console.log('ERR', e.message); } };
+await q(`select t.typname, string_agg(e.enumlabel, ',' order by e.enumsortorder) from pg_type t join pg_enum e on e.enumtypid=t.oid where t.typname in ('collab_request_status','deal_stage','partnership_status','notification_kind') group by 1`);
+await q(`select column_name, data_type, udt_name from information_schema.columns where table_name='notifications'`);
+await q(`select id, status, version, owner_note, reviewed_at, updated_at from collaboration_requests order by created_at desc limit 5`);
+await q(`select kind, title, created_at from notifications order by created_at desc limit 8`);
+await sql.end();

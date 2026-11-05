@@ -141,6 +141,11 @@ export function useChatRealtime(conversations: ConversationView[], me: { name: s
             ),
           );
         });
+        // The other side changed the deal (request, offer, review, confirm…): fetch it now.
+        ch.on("broadcast", { event: "deal" }, ({ payload }) => {
+          if ((payload as { org?: string }).org === c.me.slug) return;
+          router.refresh();
+        });
         ch.on("broadcast", { event: "read" }, ({ payload }) => {
           if ((payload as { org?: string }).org === c.me.slug) return;
           setSeen((s) => ({ ...s, [c.id]: true }));
@@ -156,7 +161,7 @@ export function useChatRealtime(conversations: ConversationView[], me: { name: s
       for (const ch of map.values()) void supabase.removeChannel(ch);
       map.clear();
     };
-  }, [key, scheduleSync]);
+  }, [key, scheduleSync, router]);
 
   /** Call on every keystroke; sends at most one "typing" event every 1.5 s. */
   const sendTyping = useCallback(
@@ -185,5 +190,22 @@ export function useChatRealtime(conversations: ConversationView[], me: { name: s
       ?.send({ type: "broadcast", event: "read", payload: { org: mySlug } });
   }, []);
 
-  return { incoming, typing, seen, lastIncomingAt, sendTyping, stopTyping, sendRead, scheduleSync };
+  /** Tell the other side the deal changed, so their panel updates without a reload. */
+  const sendDeal = useCallback((conversationId: string, mySlug: string) => {
+    void channels.current
+      .get(conversationId)
+      ?.send({ type: "broadcast", event: "deal", payload: { org: mySlug } });
+  }, []);
+
+  return {
+    incoming,
+    typing,
+    seen,
+    lastIncomingAt,
+    sendTyping,
+    stopTyping,
+    sendRead,
+    sendDeal,
+    scheduleSync,
+  };
 }

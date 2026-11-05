@@ -1,9 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { CalendarDays, Check, CircleAlert, Handshake, Info, Loader2, Send } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -18,7 +16,13 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { LOOKING_FOR, labelFor, type LookingFor } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { sendCollabRequestAction, submitOfferAction } from "../../deal-actions";
+import {
+  addProjectDealAction,
+  sendCollabRequestAction,
+  submitOfferAction,
+} from "../../deal-actions";
+import { useDealRun } from "../../deal-sync";
+import type { AddableProject, ConversationView } from "../../types";
 import { OFFER_FIELDS, offerSchema, type OfferField, type OfferValues } from "../../forms";
 
 const shell = "flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[540px]";
@@ -37,9 +41,9 @@ export function CollabRequestDialog({
   partner: string;
   role: LookingFor;
 }) {
-  const router = useRouter();
   const [message, setMessage] = useState("");
-  const [pending, start] = useTransition();
+  const { busy, run } = useDealRun();
+  const pending = busy !== null;
   const fields = OFFER_FIELDS[role];
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -86,12 +90,9 @@ export function CollabRequestDialog({
           <Button
             disabled={pending}
             onClick={() =>
-              start(async () => {
-                const r = await sendCollabRequestAction({ dealId, message });
-                if (!r.ok) return void toast.error(r.error);
-                toast.success(`Request sent to ${partner}`);
-                onOpenChange(false);
-                router.refresh();
+              void run("request", () => sendCollabRequestAction({ dealId, message }), {
+                success: `Request sent to ${partner}`,
+                onDone: () => onOpenChange(false),
               })
             }
           >
@@ -123,7 +124,6 @@ export function OfferFormDialog({
   ownerNote: string | null;
   initial: OfferValues | null;
 }) {
-  const router = useRouter();
   const fields = OFFER_FIELDS[role];
   const [values, setValues] = useState<OfferValues>(() =>
     Object.fromEntries(
@@ -137,7 +137,8 @@ export function OfferFormDialog({
   );
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [pending, start] = useTransition();
+  const { busy, run } = useDealRun();
+  const pending = busy !== null;
   const set = (k: string, v: string | string[]) => {
     setValues((s) => ({ ...s, [k]: v }));
     setFieldErrors((e) => {
@@ -169,13 +170,15 @@ export function OfferFormDialog({
           ?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
-    start(async () => {
-      const r = await submitOfferAction({ requestId, form: parsed.data });
-      if (!r.ok) return setError(r.error);
-      toast.success(`Offer sent to ${owner}`);
-      onOpenChange(false);
-      router.refresh();
-    });
+    void run(
+      "offer",
+      async () => {
+        const r = await submitOfferAction({ requestId, form: parsed.data });
+        if (!r.ok) setError(r.error);
+        return r;
+      },
+      { success: `Offer sent to ${owner}`, onDone: () => onOpenChange(false) },
+    );
   }
 
   const required = fields.filter((f) => "required" in f && f.required);
@@ -566,3 +569,146 @@ const initials = (name: string) =>
     .slice(0, 2)
     .map((w) => w[0]!.toUpperCase())
     .join("");
+
+/**
+ * Already connected: start a deal on another live project of either side, no new enquiry.
+ * The other side becomes the partner in a role the project still needs.
+ */
+export function AddProjectDialog({
+  open,
+  onOpenChange,
+  conversation: c,
+  onAdded,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  conversation: ConversationView;
+  onAdded: (dealId: string) => void;
+}) {
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [role, setRole] = useState<LookingFor | null>(null);
+  const { busy, run } = useDealRun();
+  const pending = busy !== null;
+  const mine = c.addable.filter((p) => p.ownerIsMe);
+  const theirs = c.addable.filter((p) => !p.ownerIsMe);
+  const chosen = c.addable.find((p) => p.projectId === projectId) ?? null;
+  const them = c.them.name;
+
+  function pick(p: AddableProject) {
+    setProjectId(p.projectId);
+    setRole(p.roles.length === 1 ? p.roles[0]! : null);
+  }
+
+  function submit() {
+    if (!chosen || !role) return;
+    void run(
+      "add",
+      () => addProjectDealAction({ conversationId: c.id, projectId: chosen.projectId, role }),
+      {
+        success: `${chosen.title} added. Deal started.`,
+        onDone: (r) => {
+          onOpenChange(false);
+          setProjectId(null);
+          setRole(null);
+          onAdded(r.dealId);
+        },
+      },
+    );
+  }
+
+  const group = (title: string, list: AddableProject[], note: string) =>
+    list.length ? (
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-1 text-sm font-semibold">
+          {title} <span className="font-normal text-muted-foreground">· {note}</span>
+        </legend>
+        {list.map((p) => {
+          const on = p.projectId === projectId;
+          return (
+            <div
+              key={p.projectId}
+              className={cn(
+                "flex flex-col gap-2.5 rounded-xl border p-3 transition-colors",
+                on
+                  ? "border-primary bg-primary-soft/40 ring-1 ring-primary"
+                  : "hover:border-primary/50",
+              )}
+            >
+              <button
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => pick(p)}
+                className="flex items-center gap-2.5 text-left"
+              >
+                <span
+                  aria-hidden
+                  className={cn(
+                    "flex size-4 shrink-0 items-center justify-center rounded-full border-2",
+                    on ? "border-primary" : "border-input",
+                  )}
+                >
+                  {on ? <span className="size-2 rounded-full bg-primary" /> : null}
+                </span>
+                <span className="text-[13px] font-semibold">{p.title}</span>
+              </button>
+              {on ? (
+                <div className="flex flex-wrap items-center gap-1.5 pl-6">
+                  <span className="text-xs text-muted-foreground">
+                    {p.ownerIsMe ? `${them} joins as` : "You join as"}
+                  </span>
+                  {p.roles.map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      aria-pressed={role === r}
+                      onClick={() => setRole(r)}
+                      className={cn(
+                        "h-7 rounded-full border px-3 text-xs font-semibold transition-colors",
+                        role === r
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-input bg-card hover:border-primary/50",
+                      )}
+                    >
+                      {labelFor(LOOKING_FOR, r)}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </fieldset>
+    ) : null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className={shell}>
+        <div className="border-b px-6 pt-5 pr-14 pb-4">
+          <DialogTitle className="text-xl">Add a project</DialogTitle>
+          <DialogDescription className="mt-0.5">
+            You are already connected with {them}. Start a deal on another project, no new enquiry
+            needed.
+          </DialogDescription>
+        </div>
+        <div className="flex min-h-0 flex-1 [scrollbar-width:thin] flex-col gap-5 overflow-y-auto px-6 py-5">
+          {group("Your projects", mine, `${them} becomes the partner`)}
+          {group(`${them}'s projects`, theirs, "you become the partner")}
+          <p className="flex items-start gap-1.5 text-xs leading-4 text-muted-foreground">
+            <Info className="mt-px size-3.5 shrink-0" aria-hidden /> Only live projects with an open
+            role that this organisation can take are shown. Each project runs its own request, offer
+            and confirmation.
+          </p>
+        </div>
+        <div className="flex items-center justify-end gap-2 border-t bg-surface-subtle px-6 py-4">
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button disabled={!chosen || !role || pending} onClick={submit}>
+            {pending ? <Loader2 className="animate-spin" aria-hidden /> : null} Start deal
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

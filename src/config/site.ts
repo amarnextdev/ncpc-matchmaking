@@ -44,7 +44,59 @@ export type HeaderLink = {
   exact?: boolean;
   /** Small count badge, e.g. new enquiries. */
   count?: number;
+  /** Makes the link a dropdown (e.g. Community). */
+  children?: HeaderSubLink[];
 };
+
+export type HeaderSubLink = {
+  title: string;
+  href: string;
+  description: string;
+  /** Icon name, resolved in MainNav (icons can't be passed from server to client). */
+  icon: "organisations" | "funding" | "network" | "contact";
+};
+
+/** Community dropdown: who is on the platform and how to reach NCPC. */
+function communityLink(signedIn: boolean): HeaderLink {
+  const children: HeaderSubLink[] = [
+    {
+      title: "Member directory",
+      href: routes.explore.section("organisations"),
+      description: "Verified organisations on the platform",
+      icon: "organisations",
+    },
+    {
+      title: "Funding partners",
+      href: routes.explore.section("funding"),
+      description: "Funders, grants and investment offers",
+      icon: "funding",
+    },
+    ...(signedIn
+      ? [
+          {
+            title: "My network",
+            href: routes.workspace.network,
+            description: "Your connections and invitations",
+            icon: "network" as const,
+          },
+        ]
+      : []),
+    {
+      title: "Contact NCPC",
+      href: routes.contact,
+      description: "Questions, support and partnerships",
+      icon: "contact",
+    },
+  ];
+  return {
+    title: "Community",
+    href: routes.workspace.network,
+    match: [routes.workspace.network, routes.contact],
+    children,
+  };
+}
+
+const aboutLink: HeaderLink = { title: "About", href: routes.about, match: [routes.about] };
 
 /** Paths that belong to Explore (the three browse sections). */
 const exploreMatch = [routes.explore.root, "/opportunities", "/organisations", "/funding"];
@@ -101,12 +153,19 @@ export function headerNavFor(viewer: Viewer, _counts: { enquiries?: number } = {
       },
       explore,
       ...(work ? [work] : []),
+      communityLink(true),
+      aboutLink,
     ];
   }
   if (role === "staff") {
-    return [explore, { title: "Admin panel", href: routes.admin.root, match: [routes.admin.root] }];
+    return [
+      explore,
+      { title: "Admin panel", href: routes.admin.root, match: [routes.admin.root] },
+      communityLink(false),
+      aboutLink,
+    ];
   }
-  return [explore, { title: "How it works", href: routes.about, match: [routes.about] }];
+  return [explore, communityLink(false), aboutLink];
 }
 
 /** Is a header link active for this pathname? */

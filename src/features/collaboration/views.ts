@@ -32,5 +32,6 @@ export function toView(c: Conversation, mySlug: string): ConversationView | null
     tagStage: main?.stage ?? "not_started",
     messages: c.messages,
     deals: c.deals,
+    addable: c.addable ?? [],
   };
 }

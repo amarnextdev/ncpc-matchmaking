@@ -14,6 +14,7 @@ import {
   enquiries,
   notifications,
   organisationMembers,
+  organisations,
   partnerships,
   projectNeeds,
   projects,
@@ -22,6 +23,7 @@ import { routes } from "@/config/routes";
 import { getMembershipOrg } from "@/features/onboarding/queries";
 import { getSessionUser } from "@/lib/auth/session";
 import { LOOKING_FOR, labelFor } from "@/lib/constants";
+import { canPlay } from "./constants";
 import { CAPITAL_OFFER_ROLES, moneyValue, offerSchema } from "./forms";
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
@@ -145,6 +147,95 @@ export async function startDealAction(enquiryId: string): Promise<Result<{ dealI
   } catch (error) {
     console.error("[deals] could not start:", causeOf(error));
     return { ok: false, error: "We could not start the deal. Please try again." };
+  }
+}
+
+// ── 1b. Add another project to an existing connection ───────────────────────
+
+const ROLE = z.enum(LOOKING_FOR.map((r) => r.value) as [string, ...string[]]);
+
+/**
+ * Already connected organisations start a deal on another live project of either side,
+ * without a new enquiry. The other side is the partner in a role the project still needs.
+ */
+export async function addProjectDealAction(input: {
+  conversationId: string;
+  projectId: string;
+  role: string;
+}): Promise<Result<{ dealId: string }>> {
+  const ctx = await me();
+  if (!ctx) return { ok: false, error: "Sign in with a verified organisation." };
+  const parsed = z.object({ conversationId: UUID, projectId: UUID, role: ROLE }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Choose a project and a role." };
+  const { conversationId, projectId } = parsed.data;
+  const role = parsed.data.role as (typeof LOOKING_FOR)[number]["value"];
+
+  const [c] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
+  if (!c || (c.orgAId !== ctx.org.id && c.orgBId !== ctx.org.id)) {
+    return { ok: false, error: "Conversation not found." };
+  }
+  const otherId = c.orgAId === ctx.org.id ? c.orgBId : c.orgAId;
+
+  const [p] = await db
+    .select({ orgId: projects.orgId, title: projects.title, status: projects.status })
+    .from(projects)
+    .where(eq(projects.id, projectId));
+  if (!p || p.status !== "live" || (p.orgId !== ctx.org.id && p.orgId !== otherId)) {
+    return { ok: false, error: "This project is not open for partners." };
+  }
+  const [need] = await db
+    .select({ status: projectNeeds.status })
+    .from(projectNeeds)
+    .where(and(eq(projectNeeds.projectId, projectId), eq(projectNeeds.role, role)));
+  if (!need || need.status !== "open") {
+    return { ok: false, error: "The project is no longer looking for this role." };
+  }
+  const ownerOrgId = p.orgId;
+  const partnerOrgId = ownerOrgId === ctx.org.id ? otherId : ctx.org.id;
+  const [partner] = await db
+    .select({ category: organisations.category, name: organisations.name })
+    .from(organisations)
+    .where(eq(organisations.id, partnerOrgId));
+  if (!partner || !canPlay(partner.category, role)) {
+    return {
+      ok: false,
+      error: `${partner?.name ?? "This organisation"} can't take the ${labelFor(LOOKING_FOR, role).toLowerCase()} role.`,
+    };
+  }
+
+  try {
+    const dealId = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(deals)
+        .values({
+          conversationId,
+          projectId,
+          ownerOrgId,
+          partnerOrgId,
+          role,
+          stage: "in_discussion",
+          createdBy: ctx.user.id,
+        })
+        .onConflictDoNothing({ target: [deals.conversationId, deals.projectId] })
+        .returning({ id: deals.id });
+      if (!row) throw new Error("exists");
+      await audit(tx, ctx.user.id, "deal.added", "deal", row.id, { projectId, role });
+      await notifyOrg(tx, otherId, {
+        kind: "deal_started",
+        title: `${ctx.org.name} added “${p.title}” to your collaboration`,
+        body: `As ${labelFor(LOOKING_FOR, role).toLowerCase()}`,
+        link: routes.workspace.dealChat(conversationId),
+      });
+      return row.id;
+    });
+    done(conversationId);
+    return { ok: true, dealId };
+  } catch (error) {
+    if (error instanceof Error && error.message === "exists") {
+      return { ok: false, error: "There is already a deal on this project with them." };
+    }
+    console.error("[deals] could not add project:", causeOf(error));
+    return { ok: false, error: "We could not add the project. Please try again." };
   }
 }
 

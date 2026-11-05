@@ -15,11 +15,13 @@ import {
   organisations,
   partnerships,
   profiles,
+  projectNeeds,
   projects,
 } from "@/db/schema";
 import { PROVINCES, labelFor } from "@/lib/constants";
 import { initials } from "@/lib/utils";
-import type { Conversation, Deal, DealLive, Message, Party } from "./types";
+import { canPlay } from "./constants";
+import type { AddableProject, Conversation, Deal, DealLive, Message, Party } from "./types";
 
 const timeFmt = new Intl.DateTimeFormat("en-ZA", {
   hour: "2-digit",
@@ -172,6 +174,37 @@ export const getDbConversations = cache(
         : [[], [], []];
       const mine = parties.get(me.id)!;
 
+      // Titles of deal projects, and live projects with open roles (to add another deal).
+      const [dealProjects, openNeeds] = await Promise.all([
+        dealRows.length
+          ? db
+              .select({ id: projects.id, title: projects.title, slug: projects.slug })
+              .from(projects)
+              .where(
+                inArray(
+                  projects.id,
+                  dealRows.map((d) => d.projectId),
+                ),
+              )
+          : Promise.resolve([]),
+        db
+          .select({
+            id: projects.id,
+            title: projects.title,
+            orgId: projects.orgId,
+            role: projectNeeds.role,
+          })
+          .from(projects)
+          .innerJoin(projectNeeds, eq(projectNeeds.projectId, projects.id))
+          .where(
+            and(
+              inArray(projects.orgId, [me.id, ...otherIds]),
+              eq(projects.status, "live"),
+              eq(projectNeeds.status, "open"),
+            ),
+          ),
+      ]);
+
       return convs.flatMap((c): Conversation[] => {
         const otherId = c.orgAId === me.id ? c.orgBId : c.orgAId;
         const them = parties.get(otherId);
@@ -269,71 +302,106 @@ export const getDbConversations = cache(
           msgView.push(it.msg);
         }
 
-        // One deal per accepted enquiry between the two (about a project, or general).
-        const deals: Deal[] = opened
-          .filter(
-            ({ e }) =>
-              (e.fromOrgId === me.id && e.toOrgId === otherId) ||
-              (e.toOrgId === me.id && e.fromOrgId === otherId),
-          )
-          .map(({ e, projectTitle, projectSlug }): Deal => {
-            const row = e.projectId
-              ? dealRows.find((d) => d.conversationId === c.id && d.projectId === e.projectId)
-              : undefined;
-            // Owner = the organisation whose project it is (falls back to the enquiry's target).
-            const ownerIsMe = row ? row.ownerOrgId === me.id : e.toOrgId === me.id;
-            const ownerSlug = ownerIsMe ? mine.slug : them.slug;
-            const partnerSlug = ownerIsMe ? them.slug : mine.slug;
-            const req = row ? reqRows.find((r) => r.dealId === row.id) : undefined;
-            const part = row ? partRows.find((x) => x.dealId === row.id) : undefined;
-            const live: DealLive = {
-              enquiryId: e.id,
-              dealId: row?.id ?? null,
-              projectId: e.projectId,
-              isOwner: ownerIsMe,
-              myNote: row ? (noteRows.find((n) => n.dealId === row.id)?.body ?? "") : "",
-              request: req
-                ? {
-                    id: req.id,
-                    status: req.status,
-                    ownerNote: req.ownerNote,
-                    version: req.version,
-                    form: (req.form as Record<string, string | string[]> | null) ?? null,
-                    submittedAt: req.submittedAt?.toISOString() ?? null,
-                  }
-                : null,
-              partnership: part
-                ? {
-                    id: part.id,
-                    status: part.status,
-                    amount: part.amount,
-                    amountPublic: part.amountPublic,
-                    ownerConfirmedAt: part.ownerConfirmedAt?.toISOString() ?? null,
-                    partnerConfirmedAt: part.partnerConfirmedAt?.toISOString() ?? null,
-                  }
-                : null,
-            };
-            const stage: Deal["stage"] = !row
-              ? "not_started"
-              : row.stage === "active_partner" || row.stage === "closed"
-                ? "active"
-                : row.stage;
-            return {
-              id: row?.id ?? `enq-${e.id}`,
-              projectTitle: projectTitle ?? "General enquiry",
-              projectSlug: projectSlug ?? null,
-              ownerSlug,
-              partnerSlug,
-              role: e.role,
-              stage,
-              documents: [],
-              meetings: [],
-              terms: [],
-              termsNote: "",
-              notes: {},
-              live,
-            };
-          });
+        // One deal per project: started deals first, then accepted enquiries not started yet.
+        const toDeal = (
+          row: (typeof dealRows)[number] | undefined,
+          e: (typeof opened)[number]["e"] | undefined,
+          projectTitle: string | null,
+          projectSlug: string | null,
+        ): Deal => {
+          // Owner = the organisation whose project it is (falls back to the enquiry's target).
+          const ownerIsMe = row ? row.ownerOrgId === me.id : e?.toOrgId === me.id;
+          const ownerSlug = ownerIsMe ? mine.slug : them.slug;
+          const partnerSlug = ownerIsMe ? them.slug : mine.slug;
+          const req = row ? reqRows.find((r) => r.dealId === row.id) : undefined;
+          const part = row ? partRows.find((x) => x.dealId === row.id) : undefined;
+          const live: DealLive = {
+            enquiryId: e?.id ?? null,
+            dealId: row?.id ?? null,
+            projectId: row?.projectId ?? e?.projectId ?? null,
+            isOwner: ownerIsMe,
+            myNote: row ? (noteRows.find((n) => n.dealId === row.id)?.body ?? "") : "",
+            request: req
+              ? {
+                  id: req.id,
+                  status: req.status,
+                  ownerNote: req.ownerNote,
+                  version: req.version,
+                  form: (req.form as Record<string, string | string[]> | null) ?? null,
+                  submittedAt: req.submittedAt?.toISOString() ?? null,
+                }
+              : null,
+            partnership: part
+              ? {
+                  id: part.id,
+                  status: part.status,
+                  amount: part.amount,
+                  amountPublic: part.amountPublic,
+                  ownerConfirmedAt: part.ownerConfirmedAt?.toISOString() ?? null,
+                  partnerConfirmedAt: part.partnerConfirmedAt?.toISOString() ?? null,
+                }
+              : null,
+          };
+          const stage: Deal["stage"] = !row
+            ? "not_started"
+            : row.stage === "active_partner" || row.stage === "closed"
+              ? "active"
+              : row.stage;
+          return {
+            id: row?.id ?? `enq-${e!.id}`,
+            projectTitle: projectTitle ?? "General enquiry",
+            projectSlug,
+            ownerSlug,
+            partnerSlug,
+            role: row?.role ?? e!.role,
+            stage,
+            documents: [],
+            meetings: [],
+            terms: [],
+            termsNote: "",
+            notes: {},
+            live,
+          };
+        };
+        const between = opened.filter(
+          ({ e }) =>
+            (e.fromOrgId === me.id && e.toOrgId === otherId) ||
+            (e.toOrgId === me.id && e.fromOrgId === otherId),
+        );
+        const rowsHere = dealRows.filter((d) => d.conversationId === c.id);
+        const deals: Deal[] = rowsHere.map((row) => {
+          const p = dealProjects.find((x) => x.id === row.projectId);
+          const e = between.find((x) => x.e.projectId === row.projectId)?.e;
+          return toDeal(row, e, p?.title ?? null, p?.slug ?? null);
+        });
+        const covered = new Set(rowsHere.map((d) => d.projectId));
+        for (const { e, projectTitle, projectSlug } of between) {
+          if (e.projectId && covered.has(e.projectId)) continue;
+          if (e.projectId) covered.add(e.projectId);
+          deals.push(toDeal(undefined, e, projectTitle, projectSlug ?? null));
+        }
+        // General enquiries only when there is no project deal yet.
+        const projectDeals = deals.filter((d) => d.live?.projectId);
+        if (projectDeals.length) deals.splice(0, deals.length, ...projectDeals);
+
+        // Projects that can still be added: live, an open role the partner side can take.
+        const addableMap = new Map<string, AddableProject>();
+        for (const n of openNeeds) {
+          if (covered.has(n.id)) continue;
+          if (n.orgId !== me.id && n.orgId !== otherId) continue;
+          const ownerIsMe = n.orgId === me.id;
+          const partnerCategory = ownerIsMe ? them.category : mine.category;
+          if (!canPlay(partnerCategory, n.role)) continue;
+          const cur = addableMap.get(n.id) ?? {
+            projectId: n.id,
+            title: n.title,
+            ownerIsMe,
+            roles: [],
+          };
+          cur.roles.push(n.role);
+          addableMap.set(n.id, cur);
+        }
+
         if (!deals.length) {
           deals.push({
             id: `general-${c.id}`,
@@ -359,6 +427,7 @@ export const getDbConversations = cache(
             unread: { [mine.slug]: unread },
             messages: msgView,
             deals,
+            addable: [...addableMap.values()],
           },
         ];
       });
