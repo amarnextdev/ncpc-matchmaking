@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { routes } from "@/config/routes";
+import { canListProjects } from "@/features/projects/constants";
 import {
   CalendarDays,
   Check,
@@ -10,6 +13,7 @@ import {
   Handshake,
   Info,
   Loader2,
+  Plus,
   Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -614,6 +618,7 @@ export function AddProjectDialog({
   const theirs = c.addable.filter((p) => !p.ownerIsMe);
   const chosen = c.addable.find((p) => p.projectId === projectId) ?? null;
   const them = short(c.them.name);
+  const iCanList = canListProjects(c.me.category);
   const owner = chosen ? (chosen.ownerIsMe ? "You" : them) : "";
   const partner = chosen ? (chosen.ownerIsMe ? them : "You") : "";
 
@@ -774,7 +779,36 @@ export function AddProjectDialog({
           {group("Your projects", `${them} becomes the partner`, mine)}
           {group(`${them}'s projects`, "You become the partner", theirs)}
 
-          {chosen && role ? (
+          {!c.addable.length ? (
+            <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-5 py-7 text-center">
+              <span
+                aria-hidden
+                className="flex size-11 items-center justify-center rounded-full bg-primary-soft text-primary"
+              >
+                <FolderKanban className="size-5" />
+              </span>
+              <div className="flex flex-col gap-1">
+                <p className="text-sm font-bold">No other projects to add right now</p>
+                <p className="text-[13px] leading-[19px] text-muted-foreground">
+                  A project shows here when it is live on Explore and still needs a role{" "}
+                  {iCanList ? `${them} can take` : "you can take"}. Projects you already work on
+                  together are in the project switcher.
+                </p>
+              </div>
+              <div className="flex flex-wrap justify-center gap-2">
+                {iCanList ? (
+                  <Button size="sm" asChild>
+                    <Link href={routes.workspace.newProject}>
+                      <Plus aria-hidden /> List a new project
+                    </Link>
+                  </Button>
+                ) : null}
+                <Button size="sm" variant="outline" asChild>
+                  <Link href={routes.opportunities.list}>Browse opportunities</Link>
+                </Button>
+              </div>
+            </div>
+          ) : chosen && role ? (
             <div className="flex flex-col gap-2.5 rounded-xl bg-primary-soft/60 p-3.5">
               <p className="text-xs font-bold text-primary">What happens next</p>
               <ol className="flex flex-col gap-2 text-[13px] leading-[18px]">
@@ -809,7 +843,7 @@ export function AddProjectDialog({
                 </strong>{" "}
                 on {chosen.title}
               </>
-            ) : chosen ? (
+            ) : !c.addable.length ? null : chosen ? (
               "Choose the role"
             ) : (
               "Choose a project"
@@ -818,7 +852,11 @@ export function AddProjectDialog({
           <Button variant="ghost" onClick={() => close(false)}>
             Cancel
           </Button>
-          <Button disabled={!chosen || !role || pending} onClick={submit} className="px-5">
+          <Button
+            disabled={!chosen || !role || pending}
+            onClick={submit}
+            className={cn("px-5", !c.addable.length && "hidden")}
+          >
             {pending ? <Loader2 className="animate-spin" aria-hidden /> : null} Start deal
           </Button>
         </div>

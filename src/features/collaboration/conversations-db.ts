@@ -212,6 +212,25 @@ export const getDbConversations = cache(
             ),
           ),
       ]);
+      const dealProjectIds = [
+        ...new Set([
+          ...dealRows.map((d) => d.projectId),
+          ...opened.flatMap(({ e }) => (e.projectId ? [e.projectId] : [])),
+        ]),
+      ];
+      const dealCovers = dealProjectIds.length
+        ? await db
+            .select({ projectId: projectMedia.projectId, path: files.path })
+            .from(projectMedia)
+            .innerJoin(files, eq(files.id, projectMedia.fileId))
+            .where(
+              and(inArray(projectMedia.projectId, dealProjectIds), eq(projectMedia.isCover, true)),
+            )
+        : [];
+      const coverOf = (projectId: string | null | undefined) => {
+        const c = projectId ? dealCovers.find((x) => x.projectId === projectId) : undefined;
+        return c ? publicImageUrl(c.path) : null;
+      };
       const openIds = [...new Set(openNeeds.map((n) => n.id))];
       const openCovers = openIds.length
         ? await db
@@ -377,6 +396,7 @@ export const getDbConversations = cache(
             termsNote: "",
             notes: {},
             live,
+            coverUrl: coverOf(row?.projectId ?? e?.projectId),
           };
         };
         const between = opened.filter(

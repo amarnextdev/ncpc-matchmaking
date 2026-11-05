@@ -10,10 +10,19 @@ import {
   Loader2,
   Lock,
   PartyPopper,
+  ChevronDown,
+  FolderKanban,
   Plus,
   RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { routes } from "@/config/routes";
@@ -28,6 +37,7 @@ import {
   startDealAction,
 } from "../../deal-actions";
 import { useDealRun } from "../../deal-sync";
+import { dealTodo } from "../../deal-todo";
 import { offerSummary } from "../../forms";
 import type { ConversationView, Deal, DealLive } from "../../types";
 import { AddProjectDialog, CollabRequestDialog, OfferFormDialog } from "./offer-dialogs";
@@ -574,64 +584,19 @@ function DealHeader({
 }) {
   const [adding, setAdding] = useState(false);
   const role = labelFor(LOOKING_FOR, deal.role).toLowerCase();
-  const canAdd = conversation.addable.length > 0;
+  // Always offer "Add another project"; the dialog explains when nothing can be added yet.
+  const canAdd = Boolean(deal.live);
   return (
     <>
       {deals.length > 1 || canAdd ? (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <p className="text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">
-              Projects with {conversation.them.name.replace(/\s*\(Pty\)\s*Ltd\.?$/i, "")}
-            </p>
-            <span className="text-[11px] text-muted-foreground tabular-nums">{deals.length}</span>
-          </div>
-          <div role="tablist" aria-label="Projects" className="flex flex-wrap gap-1.5">
-            {deals.map((d) => {
-              const on = d.id === deal.id;
-              return (
-                <button
-                  key={d.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={on}
-                  onClick={() => onDealChange(d.id)}
-                  className={cn(
-                    "flex max-w-full items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
-                    on
-                      ? "border-primary bg-primary text-white"
-                      : "bg-card text-foreground/80 hover:border-primary/50",
-                  )}
-                >
-                  <span
-                    aria-hidden
-                    className={cn(
-                      "size-1.5 shrink-0 rounded-full",
-                      d.live?.partnership?.status === "active"
-                        ? "bg-success-bar"
-                        : d.stage === "not_started"
-                          ? on
-                            ? "bg-white/60"
-                            : "bg-border"
-                          : on
-                            ? "bg-white"
-                            : "bg-primary",
-                    )}
-                  />
-                  <span className="truncate">{d.projectTitle}</span>
-                </button>
-              );
-            })}
-            {canAdd ? (
-              <button
-                type="button"
-                onClick={() => setAdding(true)}
-                className="flex items-center gap-1 rounded-full border border-dashed border-primary/50 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary-soft/60"
-              >
-                <Plus className="size-3.5" aria-hidden /> Add a project
-              </button>
-            ) : null}
-          </div>
-        </div>
+        <ProjectSwitcher
+          deal={deal}
+          deals={deals}
+          them={conversation.them.name}
+          canAdd={canAdd}
+          onDealChange={onDealChange}
+          onAdd={() => setAdding(true)}
+        />
       ) : null}
 
       <div className="flex flex-col gap-3 rounded-xl border border-l-4 border-l-primary bg-card p-4 shadow-[0_1px_2px_rgb(15_23_42/0.04)]">
@@ -668,6 +633,156 @@ function DealHeader({
         />
       ) : null}
     </>
+  );
+}
+
+type DealStatus = "live" | "turn" | "wait" | "new";
+
+const STATUS_UI: Record<DealStatus, { label: string; className: string }> = {
+  live: { label: "Live", className: "bg-success-soft text-success" },
+  turn: { label: "Your turn", className: "bg-warning-soft text-warning" },
+  wait: { label: "Waiting", className: "bg-muted text-muted-foreground" },
+  new: { label: "Not started", className: "bg-muted text-muted-foreground" },
+};
+
+function statusOf(d: Deal, them: string): DealStatus {
+  const live = d.live;
+  if (!live?.dealId) return "new";
+  if (live.partnership?.status === "active") return "live";
+  return dealTodo(live, them) ? "turn" : "wait";
+}
+
+function StatusPill({ status }: { status: DealStatus }) {
+  const ui = STATUS_UI[status];
+  return (
+    <span
+      className={cn(
+        "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold whitespace-nowrap",
+        ui.className,
+      )}
+    >
+      {ui.label}
+    </span>
+  );
+}
+
+function ProjectThumb({ d, size }: { d: Deal; size: "sm" | "md" }) {
+  const cls = size === "md" ? "size-9" : "size-8";
+  return d.coverUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element -- small thumbnail from storage
+    <img src={d.coverUrl} alt="" className={cn(cls, "shrink-0 rounded-lg border object-cover")} />
+  ) : (
+    <span
+      aria-hidden
+      className={cn(
+        cls,
+        "flex shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary",
+      )}
+    >
+      <FolderKanban className="size-4" />
+    </span>
+  );
+}
+
+/** "Project 2 of 3 · switch" — one dropdown with every project, its status and "Add another". */
+function ProjectSwitcher({
+  deal,
+  deals,
+  them,
+  canAdd,
+  onDealChange,
+  onAdd,
+}: {
+  deal: Deal;
+  deals: Deal[];
+  them: string;
+  canAdd: boolean;
+  onDealChange: (id: string) => void;
+  onAdd: () => void;
+}) {
+  const index = Math.max(
+    0,
+    deals.findIndex((d) => d.id === deal.id),
+  );
+  const subtitle = (d: Deal) => {
+    const amount = d.live?.partnership?.amount;
+    return [labelFor(LOOKING_FOR, d.role), amount ? formatRand(amount) : null]
+      .filter(Boolean)
+      .join(" · ");
+  };
+  const waiting = deals.filter((d) => d.id !== deal.id && statusOf(d, them) === "turn").length;
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger
+        className="group flex w-full items-center gap-2.5 rounded-xl border border-input bg-card p-2.5 text-left transition-[border-color,box-shadow] outline-none hover:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-ring/30 data-[state=open]:border-primary data-[state=open]:ring-[3px] data-[state=open]:ring-primary-soft"
+        aria-label={`Project ${index + 1} of ${deals.length}: ${deal.projectTitle}. Switch project`}
+      >
+        <ProjectThumb d={deal} size="md" />
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="text-[11px] text-muted-foreground">
+            Project {index + 1} of {deals.length} · switch
+            {waiting ? (
+              <span className="font-semibold text-warning"> · {waiting} more need you</span>
+            ) : null}
+          </span>
+          <span className="truncate text-[13px] font-bold">{deal.projectTitle}</span>
+        </span>
+        <StatusPill status={statusOf(deal, them)} />
+        <span
+          aria-hidden
+          className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary"
+        >
+          <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" />
+        </span>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        sideOffset={6}
+        className="w-[var(--radix-dropdown-menu-trigger-width)] rounded-xl p-0"
+      >
+        <p className="px-3 pt-2.5 pb-1.5 text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">
+          Projects with {them.replace(/\s*\(Pty\)\s*Ltd\.?$/i, "")}
+        </p>
+        {deals.map((d) => {
+          const on = d.id === deal.id;
+          return (
+            <DropdownMenuItem
+              key={d.id}
+              onSelect={() => onDealChange(d.id)}
+              className={cn(
+                "gap-2.5 rounded-none border-t px-3 py-2.5 first-of-type:border-t-0",
+                on && "bg-primary-soft/50",
+              )}
+            >
+              <ProjectThumb d={d} size="sm" />
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className={cn("truncate text-[13px]", on ? "font-bold" : "font-semibold")}>
+                  {d.projectTitle}
+                </span>
+                <span className="text-[11px] text-muted-foreground">{subtitle(d)}</span>
+              </span>
+              <StatusPill status={statusOf(d, them)} />
+              <span className="flex w-4 justify-center">
+                {on ? (
+                  <Check className="size-4 text-primary" strokeWidth={2.6} aria-hidden />
+                ) : null}
+              </span>
+            </DropdownMenuItem>
+          );
+        })}
+        {canAdd ? (
+          <>
+            <DropdownMenuSeparator className="my-0" />
+            <DropdownMenuItem
+              onSelect={onAdd}
+              className="gap-2 rounded-none px-3 py-3 text-[13px] font-semibold text-primary"
+            >
+              <Plus className="size-4" aria-hidden /> Add another project
+            </DropdownMenuItem>
+          </>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

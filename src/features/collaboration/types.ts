@@ -108,6 +108,8 @@ export type Deal = {
   notes: Record<string, string>;
   /** Set for database deals: the collaboration flow runs on this. */
   live?: DealLive;
+  /** Project cover photo (database deals) */
+  coverUrl?: string | null;
 };
 
 /** One chat between two organisations (they are connected). */
