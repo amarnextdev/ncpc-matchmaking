@@ -14,11 +14,14 @@ import {
   organisationMembers,
   organisations,
   partnerships,
+  files,
   profiles,
+  projectMedia,
   projectNeeds,
   projects,
 } from "@/db/schema";
-import { PROVINCES, labelFor } from "@/lib/constants";
+import { PROVINCES, THEMES, labelFor } from "@/lib/constants";
+import { publicImageUrl } from "@/lib/storage/url";
 import { initials } from "@/lib/utils";
 import { canPlay } from "./constants";
 import type { AddableProject, Conversation, Deal, DealLive, Message, Party } from "./types";
@@ -190,9 +193,14 @@ export const getDbConversations = cache(
         db
           .select({
             id: projects.id,
+            slug: projects.slug,
             title: projects.title,
             orgId: projects.orgId,
             role: projectNeeds.role,
+            city: projects.city,
+            province: projects.province,
+            theme: projects.theme,
+            capitalNeeded: projects.capitalNeeded,
           })
           .from(projects)
           .innerJoin(projectNeeds, eq(projectNeeds.projectId, projects.id))
@@ -204,6 +212,14 @@ export const getDbConversations = cache(
             ),
           ),
       ]);
+      const openIds = [...new Set(openNeeds.map((n) => n.id))];
+      const openCovers = openIds.length
+        ? await db
+            .select({ projectId: projectMedia.projectId, path: files.path })
+            .from(projectMedia)
+            .innerJoin(files, eq(files.id, projectMedia.fileId))
+            .where(and(inArray(projectMedia.projectId, openIds), eq(projectMedia.isCover, true)))
+        : [];
 
       return convs.flatMap((c): Conversation[] => {
         const otherId = c.orgAId === me.id ? c.orgBId : c.orgAId;
@@ -392,11 +408,18 @@ export const getDbConversations = cache(
           const ownerIsMe = n.orgId === me.id;
           const partnerCategory = ownerIsMe ? them.category : mine.category;
           if (!canPlay(partnerCategory, n.role)) continue;
+          const cover = openCovers.find((x) => x.projectId === n.id);
           const cur = addableMap.get(n.id) ?? {
             projectId: n.id,
+            slug: n.slug,
             title: n.title,
             ownerIsMe,
             roles: [],
+            lookingFor: openNeeds.filter((x) => x.id === n.id).map((x) => x.role),
+            coverUrl: cover ? publicImageUrl(cover.path) : null,
+            location: [n.city, labelFor(PROVINCES, n.province)].filter(Boolean).join(", "),
+            theme: labelFor(THEMES, n.theme),
+            capitalNeeded: n.capitalNeeded,
           };
           cur.roles.push(n.role);
           addableMap.set(n.id, cur);

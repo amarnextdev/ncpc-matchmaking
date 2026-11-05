@@ -125,9 +125,18 @@ export type Conversation = {
 /** A live project, with the open roles the other side can take. */
 export type AddableProject = {
   projectId: string;
+  slug: string;
   title: string;
   ownerIsMe: boolean;
+  /** Open roles the partner side can take */
   roles: LookingFor[];
+  /** Every open role of the project */
+  lookingFor: LookingFor[];
+  coverUrl: string | null;
+  /** "Atlantis, Western Cape" */
+  location: string;
+  theme: string;
+  capitalNeeded: number | null;
 };
 
 /** A conversation as one viewer sees it. */

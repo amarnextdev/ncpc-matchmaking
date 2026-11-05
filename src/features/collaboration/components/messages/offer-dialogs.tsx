@@ -1,7 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, Check, CircleAlert, Handshake, Info, Loader2, Send } from "lucide-react";
+import {
+  CalendarDays,
+  Check,
+  CircleAlert,
+  FolderKanban,
+  FolderPlus,
+  Handshake,
+  Info,
+  Loader2,
+  Send,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -570,6 +580,17 @@ const initials = (name: string) =>
     .map((w) => w[0]!.toUpperCase())
     .join("");
 
+/** "GreenFuture Energy (Pty) Ltd" → "GreenFuture Energy" */
+const short = (name: string) =>
+  name.replace(/\s*\((pty|proprietary)\)\s*(ltd|limited)\.?$/i, "").trim();
+
+const compactRand = (n: number) =>
+  n >= 1e9
+    ? `R${+(n / 1e9).toFixed(1)}bn`
+    : n >= 1e6
+      ? `R${+(n / 1e6).toFixed(1)}m`
+      : `R${Math.round(n / 1e3)}k`;
+
 /**
  * Already connected: start a deal on another live project of either side, no new enquiry.
  * The other side becomes the partner in a role the project still needs.
@@ -592,11 +613,21 @@ export function AddProjectDialog({
   const mine = c.addable.filter((p) => p.ownerIsMe);
   const theirs = c.addable.filter((p) => !p.ownerIsMe);
   const chosen = c.addable.find((p) => p.projectId === projectId) ?? null;
-  const them = c.them.name;
+  const them = short(c.them.name);
+  const owner = chosen ? (chosen.ownerIsMe ? "You" : them) : "";
+  const partner = chosen ? (chosen.ownerIsMe ? them : "You") : "";
 
   function pick(p: AddableProject) {
     setProjectId(p.projectId);
     setRole(p.roles.length === 1 ? p.roles[0]! : null);
+  }
+
+  function close(v: boolean) {
+    onOpenChange(v);
+    if (!v) {
+      setProjectId(null);
+      setRole(null);
+    }
   }
 
   function submit() {
@@ -605,106 +636,189 @@ export function AddProjectDialog({
       "add",
       () => addProjectDealAction({ conversationId: c.id, projectId: chosen.projectId, role }),
       {
-        success: `${chosen.title} added. Deal started.`,
+        success: `Deal started on ${chosen.title}`,
         onDone: (r) => {
-          onOpenChange(false);
-          setProjectId(null);
-          setRole(null);
+          close(false);
           onAdded(r.dealId);
         },
       },
     );
   }
 
-  const group = (title: string, list: AddableProject[], note: string) =>
-    list.length ? (
-      <fieldset className="flex flex-col gap-2">
-        <legend className="mb-1 text-sm font-semibold">
-          {title} <span className="font-normal text-muted-foreground">· {note}</span>
-        </legend>
-        {list.map((p) => {
-          const on = p.projectId === projectId;
-          return (
-            <div
-              key={p.projectId}
-              className={cn(
-                "flex flex-col gap-2.5 rounded-xl border p-3 transition-colors",
-                on
-                  ? "border-primary bg-primary-soft/40 ring-1 ring-primary"
-                  : "hover:border-primary/50",
-              )}
+  const card = (p: AddableProject) => {
+    const on = p.projectId === projectId;
+    const meta = [p.theme, p.location, p.capitalNeeded ? compactRand(p.capitalNeeded) : null]
+      .filter(Boolean)
+      .join(" · ");
+    return (
+      <div
+        key={p.projectId}
+        className={cn(
+          "overflow-hidden rounded-xl border bg-card transition-[border-color,box-shadow]",
+          on ? "border-primary shadow-[0_0_0_1px_var(--color-primary)]" : "hover:border-primary/40",
+        )}
+      >
+        <button
+          type="button"
+          role="radio"
+          aria-checked={on}
+          onClick={() => pick(p)}
+          className="flex w-full items-center gap-3 p-3 text-left focus-visible:bg-muted/40 focus-visible:outline-none"
+        >
+          {p.coverUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- small thumbnail from storage
+            <img
+              src={p.coverUrl}
+              alt=""
+              className="size-14 shrink-0 rounded-lg border object-cover"
+            />
+          ) : (
+            <span
+              aria-hidden
+              className="flex size-14 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary"
             >
-              <button
-                type="button"
-                role="radio"
-                aria-checked={on}
-                onClick={() => pick(p)}
-                className="flex items-center gap-2.5 text-left"
-              >
+              <FolderKanban className="size-6" />
+            </span>
+          )}
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="line-clamp-2 text-[14px] leading-5 font-semibold">{p.title}</span>
+            {meta ? <span className="truncate text-xs text-muted-foreground">{meta}</span> : null}
+            <span className="mt-1 flex flex-wrap gap-1">
+              {p.lookingFor.map((r) => (
                 <span
-                  aria-hidden
+                  key={r}
                   className={cn(
-                    "flex size-4 shrink-0 items-center justify-center rounded-full border-2",
-                    on ? "border-primary" : "border-input",
+                    "rounded-full px-2 py-0.5 text-[10.5px] font-semibold",
+                    p.roles.includes(r)
+                      ? "bg-success-soft text-success"
+                      : "bg-muted text-muted-foreground",
                   )}
                 >
-                  {on ? <span className="size-2 rounded-full bg-primary" /> : null}
+                  {labelFor(LOOKING_FOR, r)}
                 </span>
-                <span className="text-[13px] font-semibold">{p.title}</span>
-              </button>
-              {on ? (
-                <div className="flex flex-wrap items-center gap-1.5 pl-6">
-                  <span className="text-xs text-muted-foreground">
-                    {p.ownerIsMe ? `${them} joins as` : "You join as"}
-                  </span>
-                  {p.roles.map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      aria-pressed={role === r}
-                      onClick={() => setRole(r)}
-                      className={cn(
-                        "h-7 rounded-full border px-3 text-xs font-semibold transition-colors",
-                        role === r
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-input bg-card hover:border-primary/50",
-                      )}
-                    >
-                      {labelFor(LOOKING_FOR, r)}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
+              ))}
+            </span>
+          </span>
+          <span
+            aria-hidden
+            className={cn(
+              "flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+              on ? "border-primary bg-primary" : "border-input",
+            )}
+          >
+            {on ? <Check className="size-3 text-white" strokeWidth={3.5} /> : null}
+          </span>
+        </button>
+        {on ? (
+          <div className="flex flex-col gap-2 border-t bg-surface-subtle px-3 py-3">
+            <span className="text-xs font-semibold">
+              {p.ownerIsMe ? `${them} joins as` : "You join as"}
+            </span>
+            <div role="radiogroup" className="flex flex-wrap gap-1.5">
+              {p.roles.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  role="radio"
+                  aria-checked={role === r}
+                  onClick={() => setRole(r)}
+                  className={cn(
+                    "flex h-8 items-center gap-1.5 rounded-full border px-3.5 text-xs font-semibold transition-colors",
+                    role === r
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-input bg-card hover:border-primary/50",
+                  )}
+                >
+                  {role === r ? <Check className="size-3.5" strokeWidth={3} aria-hidden /> : null}
+                  {labelFor(LOOKING_FOR, r)}
+                </button>
+              ))}
             </div>
-          );
-        })}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
+  const group = (title: string, hint: string, list: AddableProject[]) =>
+    list.length ? (
+      <fieldset className="flex flex-col gap-2.5">
+        <legend className="mb-2.5 flex w-full items-baseline justify-between gap-2">
+          <span className="text-sm font-bold">{title}</span>
+          <span className="text-xs text-muted-foreground">{hint}</span>
+        </legend>
+        {list.map(card)}
       </fieldset>
     ) : null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={close}>
       <DialogContent className={shell}>
-        <div className="border-b px-6 pt-5 pr-14 pb-4">
-          <DialogTitle className="text-xl">Add a project</DialogTitle>
-          <DialogDescription className="mt-0.5">
-            You are already connected with {them}. Start a deal on another project, no new enquiry
-            needed.
-          </DialogDescription>
+        <div className="flex gap-3.5 border-b px-6 pt-5 pr-14 pb-4">
+          <span
+            aria-hidden
+            className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-white"
+          >
+            <FolderPlus className="size-5" />
+          </span>
+          <div className="min-w-0">
+            <DialogTitle className="text-xl">Add a project</DialogTitle>
+            <DialogDescription className="mt-0.5">
+              Start another deal with {them}. You are already connected, so no new enquiry is
+              needed.
+            </DialogDescription>
+          </div>
         </div>
-        <div className="flex min-h-0 flex-1 [scrollbar-width:thin] flex-col gap-5 overflow-y-auto px-6 py-5">
-          {group("Your projects", mine, `${them} becomes the partner`)}
-          {group(`${them}'s projects`, theirs, "you become the partner")}
-          <p className="flex items-start gap-1.5 text-xs leading-4 text-muted-foreground">
-            <Info className="mt-px size-3.5 shrink-0" aria-hidden /> Only live projects with an open
-            role that this organisation can take are shown. Each project runs its own request, offer
-            and confirmation.
-          </p>
+
+        <div className="flex min-h-0 flex-1 [scrollbar-width:thin] flex-col gap-6 overflow-y-auto px-6 py-5">
+          {group("Your projects", `${them} becomes the partner`, mine)}
+          {group(`${them}'s projects`, "You become the partner", theirs)}
+
+          {chosen && role ? (
+            <div className="flex flex-col gap-2.5 rounded-xl bg-primary-soft/60 p-3.5">
+              <p className="text-xs font-bold text-primary">What happens next</p>
+              <ol className="flex flex-col gap-2 text-[13px] leading-[18px]">
+                {[
+                  "The deal starts now, on its own tab in the deal panel.",
+                  `${owner} ${owner === "You" ? "send" : "sends"} a collaboration request.`,
+                  `${partner} ${partner === "You" ? "fill" : "fills"} in the offer as ${labelFor(LOOKING_FOR, role).toLowerCase()}, then you both confirm.`,
+                ].map((t, i) => (
+                  <li key={i} className="flex gap-2.5">
+                    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white">
+                      {i + 1}
+                    </span>
+                    {t}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          ) : (
+            <p className="flex items-start gap-1.5 text-xs leading-4 text-muted-foreground">
+              <Info className="mt-px size-3.5 shrink-0" aria-hidden /> Shown: live projects with an
+              open role this organisation can take (in green).
+            </p>
+          )}
         </div>
-        <div className="flex items-center justify-end gap-2 border-t bg-surface-subtle px-6 py-4">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+
+        <div className="flex items-center gap-3 border-t bg-surface-subtle px-6 py-4">
+          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+            {chosen && role ? (
+              <>
+                <strong className="font-semibold text-foreground">
+                  {labelFor(LOOKING_FOR, role)}
+                </strong>{" "}
+                on {chosen.title}
+              </>
+            ) : chosen ? (
+              "Choose the role"
+            ) : (
+              "Choose a project"
+            )}
+          </span>
+          <Button variant="ghost" onClick={() => close(false)}>
             Cancel
           </Button>
-          <Button disabled={!chosen || !role || pending} onClick={submit}>
+          <Button disabled={!chosen || !role || pending} onClick={submit} className="px-5">
             {pending ? <Loader2 className="animate-spin" aria-hidden /> : null} Start deal
           </Button>
         </div>
