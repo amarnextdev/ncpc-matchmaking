@@ -1,4 +1,5 @@
 import "server-only";
+import { SHOW_DEMO_DATA } from "@/lib/demo";
 import { ORGANISATION_CATEGORIES, PROJECT_STAGES, THEMES } from "@/lib/constants";
 import { formatRand } from "@/lib/utils";
 import { FUNDING_AMOUNTS, FUNDING_PAGE_SIZE, FUNDING_TYPES } from "./constants";
@@ -12,7 +13,8 @@ import type { FundingFilters, FundingOffer, FundingOfferDetail, FundingPage } fr
  * TODO(Module 2/7): replace MOCK_OFFERS with Drizzle queries on `funding_offers`.
  */
 async function source(): Promise<FundingOffer[]> {
-  return MOCK_OFFERS;
+  // Funding offers are not in the database yet: demo offers only outside production.
+  return SHOW_DEMO_DATA ? MOCK_OFFERS : [];
 }
 
 type Option = { value: string; label: string; count: number };

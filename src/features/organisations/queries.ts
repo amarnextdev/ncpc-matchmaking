@@ -1,4 +1,5 @@
 import "server-only";
+import { SHOW_DEMO_DATA } from "@/lib/demo";
 import {
   ORGANISATION_CATEGORIES,
   ORGANISATION_OFFERS,
@@ -32,7 +33,7 @@ import type {
  */
 async function source(): Promise<Organisation[]> {
   const { list } = await getDbOrganisations();
-  return [...list, ...MOCK_ORGANISATIONS.filter((o) => o.verified)];
+  return [...list, ...(SHOW_DEMO_DATA ? MOCK_ORGANISATIONS.filter((o) => o.verified) : [])];
 }
 
 function inTab(o: Organisation, tab: OrganisationFilters["tab"]): boolean {
@@ -149,7 +150,7 @@ function buildDetail(o: Organisation): OrganisationDetail {
       verifiedAt: o.memberSince,
       checks: ["Company registration (CIPC)", "B-BBEE certificate", "Tax compliance status (SARS)"],
     },
-    ...MOCK_ORGANISATION_DETAILS[o.slug],
+    ...(SHOW_DEMO_DATA ? MOCK_ORGANISATION_DETAILS[o.slug] : undefined),
   };
 }
 

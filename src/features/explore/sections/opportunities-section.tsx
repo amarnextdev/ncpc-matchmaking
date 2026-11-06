@@ -11,14 +11,16 @@ import {
   countActiveFilters,
   parseOpportunityFilters,
 } from "@/features/opportunities/search-params";
+import { getViewer } from "@/lib/viewer";
 import type { RawSearchParams } from "./types";
 
 /** Explore → Opportunities: search, filters and project cards. */
 export async function OpportunitiesSection({ searchParams }: { searchParams: RawSearchParams }) {
   const filters = parseOpportunityFilters(searchParams);
   const [result, facets] = await Promise.all([getOpportunities(filters), getOpportunityFacets()]);
-  // TODO(Module 6 – Matching): hide for signed-in members and show match scores instead.
-  const isVisitor = true;
+  // Only people who are not signed in see "Register free" (members and people in onboarding don't).
+  const viewer = await getViewer();
+  const isVisitor = !viewer.signedIn && !viewer.account;
 
   return (
     <>

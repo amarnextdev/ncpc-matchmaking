@@ -1,4 +1,5 @@
 import "server-only";
+import { SHOW_DEMO_DATA } from "@/lib/demo";
 import {
   CAPITAL_RANGES,
   LOOKING_FOR,
@@ -28,7 +29,7 @@ import type {
  * TODO(launch): drop MOCK_OPPORTUNITIES once there are enough real projects.
  */
 async function source(): Promise<Opportunity[]> {
-  return [...(await getLiveOpportunities()), ...MOCK_OPPORTUNITIES];
+  return [...(await getLiveOpportunities()), ...(SHOW_DEMO_DATA ? MOCK_OPPORTUNITIES : [])];
 }
 
 function matches(o: Opportunity, f: OpportunityFilters): boolean {
@@ -150,7 +151,7 @@ function buildDetail(o: Opportunity): OpportunityDetail {
       website: null,
       replyTime: null,
     },
-    ...MOCK_OPPORTUNITY_DETAILS[o.slug],
+    ...(SHOW_DEMO_DATA ? MOCK_OPPORTUNITY_DETAILS[o.slug] : undefined),
   };
 }
 
@@ -158,7 +159,7 @@ function buildDetail(o: Opportunity): OpportunityDetail {
 export async function getOpportunityBySlug(slug: string): Promise<OpportunityDetail | null> {
   const live = await getLiveOpportunityDetail(slug);
   if (live) return live;
-  const base = MOCK_OPPORTUNITIES.find((o) => o.slug === slug);
+  const base = SHOW_DEMO_DATA ? MOCK_OPPORTUNITIES.find((o) => o.slug === slug) : undefined;
   return base ? buildDetail(base) : null;
 }
 

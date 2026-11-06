@@ -51,13 +51,15 @@ export async function FundingSection({ searchParams }: { searchParams: RawSearch
           </Suspense>
 
           {viewer.signedIn ? (
-            <MemberMatchBanner projects={myProjects} offers={7} />
-          ) : (
+            result.total ? (
+              <MemberMatchBanner projects={myProjects} offers={result.total} />
+            ) : null
+          ) : !viewer.account ? (
             <VisitorBanner
               title="See which offers your project qualifies for"
               description="Register your organisation and list a project to get matched and apply."
             />
-          )}
+          ) : null}
 
           {result.items.length ? (
             <ul className="grid gap-6 md:grid-cols-2">

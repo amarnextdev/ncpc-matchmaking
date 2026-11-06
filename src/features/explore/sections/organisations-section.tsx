@@ -14,6 +14,7 @@ import {
   organisationsQuery,
   parseOrganisationFilters,
 } from "@/features/organisations/search-params";
+import { getViewer } from "@/lib/viewer";
 import type { RawSearchParams } from "./types";
 
 /** Explore → Organisations: search, category pills, filters and organisation cards. */
@@ -23,8 +24,9 @@ export async function OrganisationsSection({ searchParams }: { searchParams: Raw
     getOrganisations(filters),
     getOrganisationFacets(filters),
   ]);
-  // TODO(Module 6 – Matching): hide for signed-in members and show match scores instead.
-  const isVisitor = true;
+  // Only people who are not signed in see "Register free" (members and people in onboarding don't).
+  const viewer = await getViewer();
+  const isVisitor = !viewer.signedIn && !viewer.account;
 
   return (
     <>

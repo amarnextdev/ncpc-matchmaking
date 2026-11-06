@@ -1,4 +1,5 @@
 import "server-only";
+import { SHOW_DEMO_DATA } from "@/lib/demo";
 import { routes } from "@/config/routes";
 import type { Viewer } from "@/types";
 import { MOCK_CONVERSATIONS, MOCK_REQUESTS } from "./data/mock-conversations";
@@ -17,7 +18,7 @@ export async function getConversations(viewer: Viewer): Promise<ConversationView
   if (!slug) return [];
   const user = await getSessionUser();
   const live = await getDbConversations(slug, user?.id ?? null);
-  return (live ?? MOCK_CONVERSATIONS)
+  return (live ?? (SHOW_DEMO_DATA ? MOCK_CONVERSATIONS : []))
     .map((c) => toView(c, slug))
     .filter((c): c is ConversationView => c !== null);
 }
@@ -29,7 +30,7 @@ export async function getConversations(viewer: Viewer): Promise<ConversationView
 export async function getEnquiryRequests(viewer: Viewer): Promise<EnquiryRequest[]> {
   if (!viewer.org) return [];
   const live = await getReceivedEnquiries(viewer.org.slug);
-  return live ?? MOCK_REQUESTS[viewer.org.slug] ?? [];
+  return live ?? (SHOW_DEMO_DATA ? MOCK_REQUESTS[viewer.org.slug] : undefined) ?? [];
 }
 
 /** Link to the existing chat with an organisation, if the viewer is already connected to it. */
@@ -45,6 +46,7 @@ export async function getConnectionHref(
     const hit = live.find((x) => x.parties.some((p) => p.slug === orgSlug));
     return hit ? routes.workspace.chat(hit.id) : undefined;
   }
+  if (!SHOW_DEMO_DATA) return undefined;
   const c = MOCK_CONVERSATIONS.find(
     (x) => x.parties.some((p) => p.slug === mine) && x.parties.some((p) => p.slug === orgSlug),
   );
